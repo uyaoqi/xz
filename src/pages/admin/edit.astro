@@ -1,0 +1,246 @@
+---
+export const prerender = false;
+---
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文章编辑 - 博客后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 引入 Markdown 渲染器与高亮库 -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <style>
+    .markdown-body { box-sizing: border-box; min-width: 200px; max-width: 980px; margin: 0 auto; padding: 15px; }
+  </style>
+</head>
+<body class="bg-gray-100 flex flex-col h-screen text-gray-800">
+  <!-- 顶栏导航 -->
+  <header class="bg-white border-b px-6 py-3 flex justify-between items-center z-10">
+    <div class="flex items-center gap-3">
+      <a href="/admin/" class="text-gray-500 hover:text-black font-medium">← 返回列表</a>
+      <h2 id="pageTitle" class="text-lg font-bold border-l pl-3">新建文章</h2>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="saveStatus" class="text-xs text-gray-400"></span>
+      <button id="saveBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2 rounded-lg text-sm transition">
+        保存并发布
+      </button>
+    </div>
+  </header>
+
+  <!-- 文章属性面板 (Frontmatter) -->
+  <div class="bg-white border-b px-6 py-3 grid grid-cols-1 md:grid-cols-5 gap-3 text-sm">
+    <div class="md:col-span-2">
+      <label class="block text-xs text-gray-500 font-medium mb-1">文章标题</label>
+      <input type="text" id="title" placeholder="如：我的第一篇博客" class="w-full border px-3 py-1.5 rounded focus:border-blue-500 outline-none" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 font-medium mb-1">文件名 / Slug (URL)</label>
+      <input type="text" id="slug" placeholder="如：my-first-post" class="w-full border px-3 py-1.5 rounded focus:border-blue-500 outline-none" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 font-medium mb-1">分类</label>
+      <input type="text" id="category" placeholder="默认分类" class="w-full border px-3 py-1.5 rounded focus:border-blue-500 outline-none" />
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 font-medium mb-1">发布日期</label>
+      <input type="date" id="published" class="w-full border px-3 py-1.5 rounded focus:border-blue-500 outline-none" />
+    </div>
+    <div class="md:col-span-4">
+      <label class="block text-xs text-gray-500 font-medium mb-1">标签 (逗号分隔)</label>
+      <input type="text" id="tags" placeholder="例如：Astro, Firefly, 前端开发" class="w-full border px-3 py-1.5 rounded focus:border-blue-500 outline-none" />
+    </div>
+    <div class="flex items-end pb-1.5">
+      <label class="inline-flex items-center cursor-pointer select-none">
+        <input type="checkbox" id="draft" class="sr-only peer">
+        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-\[''] after:absolute after:top-\[2px] after:left-\[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+        <span class="ml-2 text-xs font-medium text-gray-700">设为草稿</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- 工具栏 -->
+  <div class="bg-gray-50 border-b px-6 py-2 flex items-center gap-2 text-xs text-gray-600">
+    <button type="button" onclick="insertSyntax('\*\*粗体\*\*')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">粗体</button>
+    <button type="button" onclick="insertSyntax('\*斜体\*')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">斜体</button>
+    <button type="button" onclick="insertSyntax('## 标题')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">标题</button>
+    <button type="button" onclick="insertSyntax('> 引用文本')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">引用</button>
+    <button type="button" onclick="insertSyntax('```javascript\\n// code here\\n```')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">代码块</button>
+    <span class="text-gray-400">|</span>
+    <span class="text-blue-600">💡 提示：在编辑器内直接按 Ctrl+V (或 Cmd+V) 即可自动上传剪贴板图片</span>
+  </div>
+
+  <!-- 主编辑双栏区 -->
+  <div class="flex-1 flex overflow-hidden">
+    <!-- 左侧 Markdown 编辑区 -->
+    <div class="w-1/2 h-full flex flex-col border-r bg-white">
+      <textarea
+        id="markdownInput"
+        class="w-full h-full p-6 outline-none resize-none font-mono text-sm leading-relaxed"
+        placeholder="在此输入 Markdown 正文... 支持直接拖拽或粘贴图片"
+      ></textarea>
+    </div>
+
+    <!-- 右侧实时渲染预览区 -->
+    <div class="w-1/2 h-full overflow-y-auto bg-white p-6">
+      <div id="previewArea" class="markdown-body"></div>
+    </div>
+  </div>
+
+  <script>
+    // 渲染预览逻辑
+    const input = document.getElementById('markdownInput') as HTMLTextAreaElement;
+    const preview = document.getElementById('previewArea')!;
+    (window as any).marked.setOptions({
+      highlight: function(code: string, lang: string) {
+        const language = (window as any).hljs.getLanguage(lang) ? lang : 'plaintext';
+        return (window as any).hljs.highlight(code, { language }).value;
+      }
+    });
+
+    function updatePreview() {
+      preview.innerHTML = (window as any).marked.parse(input.value || '');
+    }
+    input.addEventListener('input', updatePreview);
+
+    // 辅助插入 Markdown 语法
+    (window as any).insertSyntax = (syntax: string) => {
+      const start = input.selectionStart;
+      const end = input.selectionEnd;
+      input.setRangeText(syntax, start, end, 'select');
+      updatePreview();
+      input.focus();
+    };
+
+    // 粘贴上传剪贴板图片核心逻辑
+    input.addEventListener('paste', async (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          e.preventDefault();
+          const file = items[i].getAsFile();
+          if (!file) continue;
+
+          const placeholder = `\\n!\[正在上传图片...]()\\n`;
+          const start = input.selectionStart;
+          input.setRangeText(placeholder, start, start, 'end');
+          updatePreview();
+
+          const formData = new FormData();
+          formData.append('file', file);
+
+          try {
+            const res = await fetch('/api/admin/upload', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (res.ok && data.url) {
+              input.value = input.value.replace(placeholder, `\\n!\[](${data.url})\\n`);
+            } else {
+              alert('图片上传失败: ' + (data.error || '未知原因'));
+              input.value = input.value.replace(placeholder, '');
+            }
+          } catch (err) {
+            alert('上传过程出现异常');
+            input.value = input.value.replace(placeholder, '');
+          }
+          updatePreview();
+        }
+      }
+    });
+
+    // 载入已有文章数据（如果是编辑模式）
+    const params = new URLSearchParams(window.location.search);
+    const editSlug = params.get('slug');
+    let originalSlug = '';
+
+    // 默认发布日期设定为当天
+    (document.getElementById('published') as HTMLInputElement).value = new Date().toISOString().split('T')[0];
+
+    async function loadArticleData() {
+      if (!editSlug) return;
+      document.getElementById('pageTitle')!.innerText = '编辑文章';
+      const res = await fetch(`/api/admin/posts?slug=${encodeURIComponent(editSlug)}`);
+      if (res.ok) {
+        const data = await res.json();
+        originalSlug = data.slug;
+        (document.getElementById('slug') as HTMLInputElement).value = data.slug;
+        (document.getElementById('title') as HTMLInputElement).value = data.frontmatter.title || '';
+        (document.getElementById('category') as HTMLInputElement).value = data.frontmatter.category || '';
+        (document.getElementById('published') as HTMLInputElement).value = data.frontmatter.published ? new Date(data.frontmatter.published).toISOString().split('T')[0] : '';
+        (document.getElementById('tags') as HTMLInputElement).value = Array.isArray(data.frontmatter.tags) ? data.frontmatter.tags.join(', ') : '';
+        (document.getElementById('draft') as HTMLInputElement).checked = !!data.frontmatter.draft;
+        input.value = data.content || '';
+        updatePreview();
+      }
+    }
+    loadArticleData();
+
+    // 保存并发布
+    document.getElementById('saveBtn')?.addEventListener('click', async () => {
+      const saveBtn = document.getElementById('saveBtn') as HTMLButtonElement;
+      const saveStatus = document.getElementById('saveStatus')!;
+ 
+      const title = (document.getElementById('title') as HTMLInputElement).value.trim();
+      let slug = (document.getElementById('slug') as HTMLInputElement).value.trim();
+      const category = (document.getElementById('category') as HTMLInputElement).value.trim() || '未分类';
+      const published = (document.getElementById('published') as HTMLInputElement).value;
+      const tagsStr = (document.getElementById('tags') as HTMLInputElement).value;
+      const draft = (document.getElementById('draft') as HTMLInputElement).checked;
+      const content = input.value;
+
+      if (!title) {
+        alert('请输入文章标题！');
+        return;
+      }
+      if (!slug) {
+        slug = title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-zA-Z0-9_\-\u4e00-\u9fa5]/g, '');
+        (document.getElementById('slug') as HTMLInputElement).value = slug;
+      }
+
+      const tags = tagsStr.split(/[,，]/).map(t => t.trim()).filter(Boolean);
+
+      saveBtn.disabled = true;
+      saveBtn.innerText = '正在保存发布...';
+      saveStatus.innerText = '正在生成并提交...';
+
+      try {
+        const res = await fetch('/api/admin/posts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            slug,
+            originalSlug,
+            frontmatter: {
+              title,
+              published,
+              category,
+              tags,
+              draft,
+              description: content.substring(0, 150).replace(/[#*`\n]/g, '').trim(),
+            },
+            content
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert(`保存成功！${data.triggeredDeploy ? '已全自动触发线上构建更新，稍后即可在前台看到！' : ''}`);
+          window.location.href = '/admin/';
+        } else {
+          alert('保存失败: ' + (data.error || '未知错误'));
+        }
+      } catch (err) {
+        alert('保存网络异常');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerText = '保存并发布';
+        saveStatus.innerText = '';
+      }
+    });
+  </script>
+</body>
+</html>

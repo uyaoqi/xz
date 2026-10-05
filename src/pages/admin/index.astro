@@ -1,0 +1,94 @@
+---
+export const prerender = false;
+---
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>后台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen">
+  <div class="max-w-6xl mx-auto px-4 py-8">
+    <header class="flex justify-between items-center mb-8 border-b pb-4 bg-white p-4 rounded-xl shadow-sm">
+      <div>
+        <h1 class="text-2xl font-bold">文章管理</h1>
+        <p class="text-sm text-gray-500">在线查看、编写、修改与删除博客文章</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="/" target="\_blank" class="px-3 py-2 text-sm text-gray-600 hover:text-black">预览前台</a>
+        <a href="/admin/edit/" class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg font-medium shadow transition">+ 新建文章</a>
+        <button id="logoutBtn" class="bg-red-50 text-red-600 hover:bg-red-100 text-sm px-4 py-2 rounded-lg">退出登录</button>
+      </div>
+    </header>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-gray-50 border-b text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            <th class="p-4">标题 / 文件名</th>
+            <th class="p-4">分类</th>
+            <th class="p-4">发布日期</th>
+            <th class="p-4">状态</th>
+            <th class="p-4 text-right">操作</th>
+          </tr>
+        </thead>
+        <tbody id="postsList" class="divide-y divide-gray-100 text-sm">
+          <tr><td colspan="5" class="p-6 text-center text-gray-400">正在载入文章列表...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    async function loadPosts() {
+      const res = await fetch('/api/admin/posts');
+      const posts = await res.json();
+      const listEl = document.getElementById('postsList');
+      if (!posts || posts.length === 0) {
+        listEl!.innerHTML = '<tr><td colspan="5" class="p-6 text-center text-gray-400">暂无文章，点击右上角新建文章吧！</td></tr>';
+        return;
+      }
+      listEl!.innerHTML = posts.map((post: any) => `
+        <tr class="hover:bg-gray-50 transition">
+          <td class="p-4">
+            <div class="font-medium text-gray-900">${post.title}</div>
+            <div class="text-xs text-gray-400 mt-0.5">${post.slug}.md</div>
+          </td>
+          <td class="p-4 text-gray-600"><span class="bg-gray-100 px-2 py-0.5 rounded text-xs">${post.category}</span></td>
+          <td class="p-4 text-gray-500">${post.published || '未设定'}</td>
+          <td class="p-4">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${post.draft ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}">
+              ${post.draft ? '草稿' : '已发布'}
+            </span>
+          </td>
+          <td class="p-4 text-right space-x-2">
+            <a href="/admin/edit/?slug=${encodeURIComponent(post.slug)}" class="text-blue-600 hover:text-blue-800 font-medium">编辑</a>
+            <button onclick="deletePost('${post.slug}')" class="text-red-600 hover:text-red-800 font-medium ml-2">删除</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    (window as any).deletePost = async (slug: string) => {
+      if (!confirm(`确定要删除文章 "${slug}" 吗？此操作无法撤销并会同步触发重新部署。`)) return;
+      const res = await fetch(`/api/admin/posts?slug=${encodeURIComponent(slug)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.triggeredDeploy ? '删除成功，已触发线上更新构建！' : '删除成功！');
+        loadPosts();
+      } else {
+        alert(data.error || '删除失败');
+      }
+    };
+
+    document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+      await fetch('/api/admin/logout', { method: 'POST' });
+      window.location.href = '/admin/login/';
+    });
+
+    loadPosts();
+  </script>
+</body>
+</html>
