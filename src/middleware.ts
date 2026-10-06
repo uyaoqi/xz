@@ -13,15 +13,17 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   if (isAdminPage || isAdminApi) {
     const { env } = await import('cloudflare:workers');
-    const secret = env.JWT_SECRET;
-    if (!secret || secret.length < 32) {
-      return new Response(JSON.stringify({ error: 'Admin authentication is not configured.' }), {
+    const { ADMIN_USERNAME, ADMIN_PASSWORD, JWT_SECRET } = env;
+    if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !JWT_SECRET || JWT_SECRET.length < 32) {
+      return new Response(JSON.stringify({
+        error: '后台认证环境变量未配置。请在本地 .dev.vars 或线上 Cloudflare Worker Secrets 中设置 ADMIN_USERNAME、ADMIN_PASSWORD 和不少于 32 个字符的 JWT_SECRET。',
+      }), {
         status: 503,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
       });
     }
     const token = context.cookies.get('admin_token')?.value;
-    const isValid = token ? await verifyToken(token, secret) : null;
+    const isValid = token ? await verifyToken(token, JWT_SECRET) : null;
 
     if (!isValid) {
       if (isAdminApi) {

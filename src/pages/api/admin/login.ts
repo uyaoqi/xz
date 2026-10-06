@@ -9,7 +9,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     const { username, password } = await request.json();
     const { ADMIN_USERNAME, ADMIN_PASSWORD, JWT_SECRET } = env;
     if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !JWT_SECRET || JWT_SECRET.length < 32) {
-      return new Response(JSON.stringify({ error: '后台认证环境变量未配置。' }), { status: 503 });
+      return new Response(JSON.stringify({
+        error: '后台认证环境变量未配置。请在本地 .dev.vars 或线上 Cloudflare Worker Secrets 中设置 ADMIN_USERNAME、ADMIN_PASSWORD 和不少于 32 个字符的 JWT_SECRET。',
+      }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      });
     }
 
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {

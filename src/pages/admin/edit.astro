@@ -7,118 +7,171 @@ export const prerender = false;
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>文章编辑 - 博客后台</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script is:inline src="https://cdn.tailwindcss.com"></script>
   <!-- 引入 Markdown 渲染器与高亮库 -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script is:inline src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script is:inline src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <style>
-    .markdown-body { box-sizing: border-box; min-width: 200px; max-width: 980px; margin: 0 auto; padding: 15px; }
+    :root { color-scheme: light; }
+    body { background: #f7f7f2; }
+    .admin-nav, .editor-card { box-shadow: 0 8px 28px rgba(42, 58, 45, .07); }
+    .admin-nav-link { display: inline-flex; align-items: center; min-height: 42px; padding: 0 12px; border-radius: 8px; color: #364152; font-weight: 500; white-space: nowrap; }
+    .admin-nav-link:hover { background: #f1f5f1; color: #438f69; }
+    .admin-nav-link.active { background: #4b9b72; color: white; }
+    .field-label { display: block; margin-bottom: 6px; color: #485363; font-size: .875rem; font-weight: 600; }
+    .field-input { width: 100%; border: 1px solid #e3e5df; border-radius: 8px; background: white; padding: 10px 12px; outline: none; }
+    .field-input:focus { border-color: #4b9b72; box-shadow: 0 0 0 3px rgba(75, 155, 114, .14); }
+    .toolbar-button { flex: 0 0 auto; min-width: 36px; height: 34px; border: 1px solid transparent; border-radius: 6px; padding: 0 9px; color: #414a56; font-weight: 600; }
+    .toolbar-button:hover { border-color: #dce5dd; background: white; color: #438f69; }
+    .markdown-body { box-sizing: border-box; min-width: 0; max-width: 980px; margin: 0 auto; padding: 20px; }
+    @media (max-width: 640px) {
+      .markdown-body { padding: 12px 4px; }
+      .admin-nav-link { min-height: 38px; padding: 0 10px; }
+    }
   </style>
 </head>
-<body class="bg-gray-100 flex flex-col h-screen text-gray-800">
-  <!-- 顶栏导航 -->
-  <header class="bg-white border-b px-6 py-3 flex justify-between items-center z-10">
-    <div class="flex items-center gap-3">
-      <a href="/admin/" class="text-gray-500 hover:text-black font-medium">← 返回列表</a>
-      <h2 id="pageTitle" class="text-lg font-bold border-l pl-3">新建文章</h2>
-    </div>
-    <div class="flex items-center gap-3">
-      <span id="saveStatus" class="text-xs text-gray-400"></span>
-      <button id="saveBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2 rounded-lg text-sm transition">
-        保存并发布
-      </button>
-    </div>
-  </header>
+<body class="min-h-screen text-gray-800">
+  <div class="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6">
+    <nav class="admin-nav mb-5 flex flex-wrap items-center gap-1 rounded-2xl bg-white p-3 sm:p-4" aria-label="后台导航">
+      <a href="/" data-no-swup class="admin-nav-link">首页</a>
+      <a href="/admin/" data-no-swup class="admin-nav-link">管理</a>
+      <a href="/admin/edit/" data-no-swup class="admin-nav-link active" aria-current="page">新增文章</a>
+      <a href="/articles/" data-no-swup class="admin-nav-link">文章库</a>
+      <a href="/" data-no-swup class="admin-nav-link">预览前台</a>
+      <button id="logoutBtn" type="button" class="admin-nav-link ml-auto">退出</button>
+    </nav>
 
-  <!-- 文章属性面板 (Frontmatter) -->
-  <div class="bg-white border-b px-6 py-3 grid grid-cols-1 md:grid-cols-5 gap-3 text-sm">
-    <div class="md:col-span-2">
-      <label class="block text-xs text-gray-500 font-medium mb-1">文章标题</label>
-      <input type="text" id="title" placeholder="如：我的第一篇博客" class="w-full border px-3 py-1.5 rounded focus:border-blue-500 outline-none" />
-    </div>
-    <div>
-      <label class="block text-xs text-gray-500 font-medium mb-1">文件名 / Slug (URL)</label>
-      <input type="text" id="slug" placeholder="如：my-first-post" class="w-full border px-3 py-1.5 rounded focus:border-blue-500 outline-none" />
-    </div>
-    <div>
-      <label class="block text-xs text-gray-500 font-medium mb-1">分类</label>
-      <input type="text" id="category" placeholder="默认分类" class="w-full border px-3 py-1.5 rounded focus:border-blue-500 outline-none" />
-    </div>
-    <div>
-      <label class="block text-xs text-gray-500 font-medium mb-1">发布日期</label>
-      <input type="date" id="published" class="w-full border px-3 py-1.5 rounded focus:border-blue-500 outline-none" />
-    </div>
-    <div class="md:col-span-4">
-      <label class="block text-xs text-gray-500 font-medium mb-1">标签 (逗号分隔)</label>
-      <input type="text" id="tags" placeholder="例如：Astro, Firefly, 前端开发" class="w-full border px-3 py-1.5 rounded focus:border-blue-500 outline-none" />
-    </div>
-    <div class="flex items-end pb-1.5">
-      <label class="inline-flex items-center cursor-pointer select-none">
-        <input type="checkbox" id="draft" class="sr-only peer">
-        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-\[''] after:absolute after:top-\[2px] after:left-\[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
-        <span class="ml-2 text-xs font-medium text-gray-700">设为草稿</span>
-      </label>
-    </div>
-  </div>
+    <main class="editor-card rounded-2xl bg-white p-4 sm:p-7">
+      <header class="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-4">
+        <div>
+          <h1 id="pageTitle" class="text-2xl font-bold text-[#4b9b72]">新增 Post</h1>
+          <p class="mt-1 text-sm text-gray-500">使用 Markdown 编写文章，右侧实时查看排版效果</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span id="saveStatus" class="text-xs text-gray-500" role="status"></span>
+          <button id="saveBtn" class="rounded-lg bg-[#4b9b72] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3e855f] disabled:cursor-wait disabled:opacity-60">
+            保存文章
+          </button>
+        </div>
+      </header>
 
-  <!-- 工具栏 -->
-  <div class="bg-gray-50 border-b px-6 py-2 flex items-center gap-2 text-xs text-gray-600">
-    <button type="button" onclick="insertSyntax('\*\*粗体\*\*')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">粗体</button>
-    <button type="button" onclick="insertSyntax('\*斜体\*')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">斜体</button>
-    <button type="button" onclick="insertSyntax('## 标题')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">标题</button>
-    <button type="button" onclick="insertSyntax('> 引用文本')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">引用</button>
-    <button type="button" onclick="insertSyntax('```javascript\\n// code here\\n```')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">代码块</button>
-    <span class="text-gray-400">|</span>
-    <button type="button" onclick="insertMediaLink('image')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">插入图片链接</button>
-    <button type="button" onclick="insertMediaLink('video')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">插入视频链接</button>
-    <span class="text-blue-600">💡 粘贴图库提供的图片或视频 URL，不会上传文件</span>
-  </div>
+      <section class="space-y-5" aria-label="文章内容">
+        <div>
+          <label for="title" class="field-label">标题</label>
+          <input type="text" id="title" placeholder="请输入文章标题" class="field-input" />
+        </div>
 
-  <!-- 主编辑双栏区 -->
-  <div class="flex-1 flex overflow-hidden">
-    <!-- 左侧 Markdown 编辑区 -->
-    <div class="w-1/2 h-full flex flex-col border-r bg-white">
-      <textarea
-        id="markdownInput"
-        class="w-full h-full p-6 outline-none resize-none font-mono text-sm leading-relaxed"
-        placeholder="在此输入 Markdown 正文... 图片和视频请粘贴链接，或使用上方按钮插入"
-      ></textarea>
-    </div>
+        <div>
+          <label for="markdownInput" class="field-label">内容（Markdown）</label>
+          <div class="overflow-hidden rounded-xl border border-gray-300">
+            <div class="flex flex-wrap items-center gap-1 border-b border-gray-300 bg-gray-50 px-2 py-2" role="toolbar" aria-label="Markdown 编辑工具栏">
+              <button type="button" data-before="**" data-after="**" class="toolbar-button" title="加粗"><strong>B</strong></button>
+              <button type="button" data-before="*" data-after="*" class="toolbar-button italic" title="斜体">I</button>
+              <button type="button" data-before="~~" data-after="~~" class="toolbar-button line-through" title="删除线">S</button>
+              <button type="button" data-before="## " data-after="" class="toolbar-button" title="二级标题">H2</button>
+              <button type="button" data-before="> " data-after="" class="toolbar-button" title="引用">❞</button>
+              <button type="button" data-before="```&#10;" data-after="&#10;```" class="toolbar-button font-mono" title="代码块">&lt;/&gt;</button>
+              <span class="mx-1 h-6 border-l border-gray-300" aria-hidden="true"></span>
+              <button type="button" data-before="1. " data-after="" class="toolbar-button" title="有序列表">1.</button>
+              <button type="button" data-before="- " data-after="" class="toolbar-button" title="无序列表">☷</button>
+              <button type="button" data-action="link" class="toolbar-button" title="插入链接">链</button>
+              <button type="button" data-action="image" class="toolbar-button" title="插入图片">图片</button>
+              <button type="button" data-action="video" class="toolbar-button" title="插入视频链接">视频</button>
+              <button type="button" data-action="clear" class="toolbar-button ml-auto text-gray-500" title="清空正文">清空</button>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2">
+              <div class="flex min-h-[420px] flex-col border-b border-gray-200 lg:border-b-0 lg:border-r">
+                <div class="border-b border-gray-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Markdown</div>
+                <textarea
+                  id="markdownInput"
+                  class="min-h-[360px] w-full flex-1 resize-y p-4 font-mono text-sm leading-7 outline-none sm:p-5"
+                  placeholder="在此输入 Markdown 正文..."
+                  aria-label="Markdown 正文"
+                ></textarea>
+              </div>
+              <div class="min-h-[420px] overflow-y-auto bg-white">
+                <div class="border-b border-gray-100 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-400">实时预览</div>
+                <div id="previewArea" class="markdown-body"></div>
+              </div>
+            </div>
+          </div>
+          <p class="mt-2 text-xs text-gray-500">选中内容后使用工具栏插入格式；图片和视频按钮接受公开的 HTTP(S) 链接，不会上传文件。</p>
+        </div>
 
-    <!-- 右侧实时渲染预览区 -->
-    <div class="w-1/2 h-full overflow-y-auto bg-white p-6">
-      <div id="previewArea" class="markdown-body"></div>
-    </div>
+        <div>
+          <label for="description" class="field-label">摘要（可选）</label>
+          <textarea id="description" rows="3" placeholder="输入一段简短描述" class="field-input resize-y"></textarea>
+        </div>
+
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label for="slug" class="field-label">文件名 / Slug</label>
+            <input type="text" id="slug" placeholder="例如：my-first-post" class="field-input" />
+          </div>
+          <div>
+            <label for="published" class="field-label">发布日期</label>
+            <input type="date" id="published" class="field-input" />
+          </div>
+          <div>
+            <label for="category" class="field-label">分类</label>
+            <input type="text" id="category" placeholder="默认分类" class="field-input" />
+          </div>
+          <div>
+            <label for="tags" class="field-label">标签（逗号分隔）</label>
+            <input type="text" id="tags" placeholder="Astro, Firefly, 前端开发" class="field-input" />
+          </div>
+          <div class="sm:col-span-2">
+            <label for="image" class="field-label">封面图链接（可选）</label>
+            <input type="url" id="image" placeholder="https://example.com/cover.jpg" class="field-input" />
+          </div>
+        </div>
+
+        <fieldset class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+          <legend class="px-1 text-sm font-semibold text-gray-700">状态与展示</legend>
+          <div class="flex flex-wrap gap-x-8 gap-y-3">
+            <label class="inline-flex cursor-pointer items-center gap-2">
+              <input type="checkbox" id="draft" class="h-4 w-4 accent-[#4b9b72]" checked />
+              <span>草稿（取消勾选后发布）</span>
+            </label>
+            <label class="inline-flex cursor-pointer items-center gap-2">
+              <input type="checkbox" id="pinned" class="h-4 w-4 accent-[#4b9b72]" />
+              <span>置顶文章</span>
+            </label>
+          </div>
+        </fieldset>
+      </section>
+    </main>
+    <footer class="py-5 text-center text-sm text-gray-500">博客 / 管理后台</footer>
   </div>
 
   <script>
     // 渲染预览逻辑
     const input = document.getElementById('markdownInput') as HTMLTextAreaElement;
     const preview = document.getElementById('previewArea')!;
-    (window as any).marked.setOptions({
-      highlight: function(code: string, lang: string) {
-        const language = (window as any).hljs.getLanguage(lang) ? lang : 'plaintext';
-        return (window as any).hljs.highlight(code, { language }).value;
-      }
-    });
 
     function updatePreview() {
-      preview.innerHTML = (window as any).marked.parse(input.value || '');
+      const html = (window as any).marked.parse(input.value || '');
+      preview.innerHTML = html;
+      preview.querySelectorAll('pre code').forEach((block) => {
+        (window as any).hljs.highlightElement(block);
+      });
     }
     input.addEventListener('input', updatePreview);
 
-    // 辅助插入 Markdown 语法
-    (window as any).insertSyntax = (syntax: string) => {
+    function insertSyntax(before: string, after = '') {
       const start = input.selectionStart;
       const end = input.selectionEnd;
-      input.setRangeText(syntax, start, end, 'select');
+      const selected = input.value.slice(start, end);
+      input.setRangeText(before + selected + after, start, end, 'select');
+      input.selectionStart = start + before.length;
+      input.selectionEnd = start + before.length + selected.length;
       updatePreview();
       input.focus();
-    };
+    }
 
-    (window as any).insertMediaLink = (type: 'image' | 'video') => {
+    function insertMediaLink(type: 'image' | 'video') {
       const rawUrl = window.prompt(`粘贴${type === 'image' ? '图片' : '视频'}链接 (https://...)`);
       if (rawUrl === null) return;
 
@@ -139,12 +192,47 @@ export const prerender = false;
         : (window.prompt('视频链接文字 (可选)') || '观看视频');
       const safeUrl = url.toString();
       const safeLabel = label.replace(/[\]\\]/g, '\\$&').replace(/[\r\n]/g, ' ');
-      (window as any).insertSyntax(
+      const syntax =
         type === 'image'
           ? `![${safeLabel}](<${safeUrl}>)`
-          : `[${safeLabel}](<${safeUrl}>)`
-      );
-    };
+          : `[${safeLabel}](<${safeUrl}>)`;
+      input.setRangeText(syntax, input.selectionStart, input.selectionEnd, 'select');
+      updatePreview();
+      input.focus();
+    }
+
+    document.querySelector('[role="toolbar"]')?.addEventListener('click', (event) => {
+      const button = (event.target as HTMLElement).closest('button');
+      if (!button) return;
+
+      const action = button.dataset.action;
+      if (action === 'image' || action === 'video') {
+        insertMediaLink(action);
+      } else if (action === 'link') {
+        const label = window.prompt('链接文字 (可选)') || '链接';
+        const rawUrl = window.prompt('粘贴链接 (https://...)');
+        if (rawUrl === null) return;
+        try {
+          const url = new URL(rawUrl.trim());
+          if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('Unsupported URL protocol');
+          insertSyntax(`[${label.replace(/[\]\\]/g, '\\$&')}](<${url.toString()}>)`);
+        } catch {
+          alert('请输入有效的 HTTP 或 HTTPS 链接。');
+        }
+      } else if (action === 'clear') {
+        if (window.confirm('确定要清空 Markdown 正文吗？')) {
+          input.value = '';
+          updatePreview();
+        }
+      } else if (button.dataset.before !== undefined) {
+        insertSyntax(button.dataset.before, button.dataset.after || '');
+      }
+    });
+
+    document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+      await fetch('/api/admin/logout', { method: 'POST' });
+      window.location.href = '/admin/login/';
+    });
 
     // 载入已有文章数据（如果是编辑模式）
     const params = new URLSearchParams(window.location.search);
@@ -167,11 +255,20 @@ export const prerender = false;
         (document.getElementById('published') as HTMLInputElement).value = data.frontmatter.published ? new Date(data.frontmatter.published).toISOString().split('T')[0] : '';
         (document.getElementById('tags') as HTMLInputElement).value = Array.isArray(data.frontmatter.tags) ? data.frontmatter.tags.join(', ') : '';
         (document.getElementById('draft') as HTMLInputElement).checked = !!data.frontmatter.draft;
+        (document.getElementById('description') as HTMLTextAreaElement).value = data.frontmatter.description || '';
+        (document.getElementById('image') as HTMLInputElement).value = data.frontmatter.image || '';
+        (document.getElementById('pinned') as HTMLInputElement).checked = !!data.frontmatter.pinned;
         input.value = data.content || '';
         updatePreview();
+      } else {
+        const data = await res.json();
+        alert(data.error || '文章加载失败。');
       }
     }
-    loadArticleData();
+    loadArticleData().catch((error) => {
+      console.error('加载文章失败：', error);
+      alert('加载文章失败，请检查网络连接后重试。');
+    });
 
     // 保存并发布
     document.getElementById('saveBtn')?.addEventListener('click', async () => {
@@ -184,6 +281,9 @@ export const prerender = false;
       const published = (document.getElementById('published') as HTMLInputElement).value;
       const tagsStr = (document.getElementById('tags') as HTMLInputElement).value;
       const draft = (document.getElementById('draft') as HTMLInputElement).checked;
+      const description = (document.getElementById('description') as HTMLTextAreaElement).value.trim();
+      const image = (document.getElementById('image') as HTMLInputElement).value.trim();
+      const pinned = (document.getElementById('pinned') as HTMLInputElement).checked;
       const content = input.value;
 
       if (!title) {
@@ -214,7 +314,9 @@ export const prerender = false;
               category,
               tags,
               draft,
-              description: content.substring(0, 150).replace(/[#*`\n]/g, '').trim(),
+              description: description || content.substring(0, 150).replace(/[#*`\n]/g, '').trim(),
+              image,
+              pinned,
             },
             content
           })

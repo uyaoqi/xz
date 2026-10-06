@@ -96,7 +96,6 @@ const managerConfigStr = JSON.stringify({
 
     // ── Audio element (persistent, attached to body) ────────
     var audio = document.createElement('audio');
-    audio.crossOrigin = 'anonymous';
     audio.style.display = 'none';
     document.body.appendChild(audio);
 
@@ -212,12 +211,7 @@ const managerConfigStr = JSON.stringify({
         emit('fm:track', { index: index, track: track, autoPlay: !!autoPlay });
 
         if (autoPlay) {
-            audio.play().then(function () {
-                state.isPlaying = true;
-                emit('fm:play-state', { isPlaying: true });
-            }).catch(function (e) {
-                console.warn('Autoplay blocked:', e);
-            });
+            startPlayback();
         } else {
             state.isPlaying = false;
             emit('fm:play-state', { isPlaying: false });
@@ -225,12 +219,23 @@ const managerConfigStr = JSON.stringify({
     }
 
     // ── Playback controls ────────────────────────────────────
+    function startPlayback() {
+        audio.play().then(function () {
+            state.isPlaying = true;
+            state.error = null;
+            emit('fm:play-state', { isPlaying: true });
+        }).catch(function (error) {
+            state.isPlaying = false;
+            state.error = error.message || 'Audio playback error';
+            console.warn('Audio playback failed:', error);
+            emit('fm:play-state', { isPlaying: false });
+            emit('fm:error', { message: config.i18n.error });
+        });
+    }
+
     function togglePlay() {
         if (audio.paused) {
-            audio.play().then(function () {
-                state.isPlaying = true;
-                emit('fm:play-state', { isPlaying: true });
-            });
+            startPlayback();
         } else {
             audio.pause();
             state.isPlaying = false;
@@ -241,7 +246,7 @@ const managerConfigStr = JSON.stringify({
     function playNext(auto) {
         if (state.playMode === 1 && auto) {
             audio.currentTime = 0;
-            audio.play();
+            startPlayback();
             return;
         }
         var nextIndex;
@@ -340,8 +345,11 @@ const managerConfigStr = JSON.stringify({
     });
 
     audio.addEventListener('error', function () {
+        state.isPlaying = false;
         state.error = 'Audio playback error';
-        emit('fm:error', { message: state.error });
+        console.error('Audio playback error, media error code:', audio.error ? audio.error.code : 'unknown');
+        emit('fm:play-state', { isPlaying: false });
+        emit('fm:error', { message: config.i18n.error });
     });
 
     // ── Init (idempotent) ────────────────────────────────────
