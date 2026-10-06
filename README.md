@@ -193,6 +193,7 @@ corepack pnpm exec wrangler secret put JWT_SECRET
 ```
 
 `JWT_SECRET` 必须至少 32 个字符，并使用随机、不可预测的值。可用密码管理器生成。每次更换这些值后，重新部署 Worker 使配置生效。
+`ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 都必须至少 6 个字符，建议为此站点单独生成不重复的账号和高强度密码；可混合使用英文字母、数字和特殊符号。登录只校验当前 Worker 环境中的这两个 Secret，不会读取文档示例或后台站点设置。部署不会自动生成或更换账号密码；只要不主动修改/删除 Worker Secret，设置值就持续有效。
 
 #### 三、部署方式 A：从本地命令行部署
 
@@ -241,7 +242,7 @@ JWT_SECRET=replace-with-a-random-secret-at-least-32-characters-long
 ADMIN_HOSTNAME=admin.example.com
 ```
 
-请勿把真实账号、密码或 JWT secret 提交到 Git。线上环境请在 Cloudflare Worker 的 **Settings → Variables and Secrets** 添加 `ADMIN_USERNAME`、`ADMIN_PASSWORD` 和 `JWT_SECRET` 三个加密 Secret；`ADMIN_HOSTNAME` 是可选的普通变量。若不设置 `ADMIN_HOSTNAME`，主机名以 `admin.` 开头的域名会自动作为管理域名。仅配置 GitHub Actions Secrets 或 `.env` 不会自动设置 Worker Secrets。管理员密码变更后，既有登录令牌会立即失效，需重新登录。
+请勿把真实账号、密码或 JWT secret 提交到 Git。线上环境请在 Cloudflare Worker 的 **Settings → Variables and Secrets** 添加 `ADMIN_USERNAME`、`ADMIN_PASSWORD` 和 `JWT_SECRET` 三个加密 Secret；账号和密码至少 6 个字符，`JWT_SECRET` 至少 32 个字符。`ADMIN_HOSTNAME` 是可选的普通变量。若不设置 `ADMIN_HOSTNAME`，主机名以 `admin.` 开头的域名会自动作为管理域名。仅配置 GitHub Actions Secrets 或 `.env` 不会自动设置 Worker Secrets。管理员密码变更后，既有登录令牌会立即失效，需重新登录。
 
 本地开发时先创建本地 D1 表，再启动 Worker 模拟环境：
 
@@ -250,7 +251,7 @@ corepack pnpm exec wrangler d1 execute firefly_db --local --file=./schema.sql
 corepack pnpm exec wrangler dev
 ```
 
-`pnpm dev` 用于常规 Astro 开发；涉及 D1、后台认证或 Worker 绑定的功能应使用 `wrangler dev` 验证。针对本地 D1 的数据库命令使用 `--local`，初始化线上数据库则使用 `--remote`。后台显示认证环境变量未配置时，请确认当前运行环境已加载 `.dev.vars`，或线上 Worker 已添加三个 Secrets；`JWT_SECRET` 必须至少 32 个字符。
+`pnpm dev` 用于常规 Astro 开发；涉及 D1、后台认证或 Worker 绑定的功能应使用 `wrangler dev` 验证。针对本地 D1 的数据库命令使用 `--local`，初始化线上数据库则使用 `--remote`。本地 `.dev.vars` 仅供 Wrangler 本地运行使用，不会与线上 Cloudflare Worker Secrets 同步；本地和线上登录账号密码因此可以不同。遇到无法登录时，确认访问的是哪个 Worker 环境，并核对该环境实际配置的 `ADMIN_USERNAME`、`ADMIN_PASSWORD` 和 `JWT_SECRET`；账号和密码至少 6 个字符，`JWT_SECRET` 至少 32 个字符。
 
 ## 📖 配置说明
 

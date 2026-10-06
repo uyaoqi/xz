@@ -1,5 +1,9 @@
 import { defineMiddleware } from "astro:middleware";
-import { getCredentialVersion, verifyToken } from "./utils/auth";
+import {
+	getCredentialVersion,
+	getValidAdminAuthConfig,
+	verifyToken,
+} from "./utils/auth";
 import {
 	applySiteSettings,
 	ensureSiteSettingsTable,
@@ -67,17 +71,16 @@ export const onRequest = defineMiddleware(async (context, next) => {
 			!isAdminLoginApi &&
 			!isAdminAuthCheckApi);
 	if (requiresAdminAuth) {
-		const { ADMIN_USERNAME, ADMIN_PASSWORD, JWT_SECRET } = env;
-		if (
-			!ADMIN_USERNAME ||
-			!ADMIN_PASSWORD ||
-			!JWT_SECRET ||
-			JWT_SECRET.length < 32
-		) {
+		const adminAuth = getValidAdminAuthConfig({
+			username: env.ADMIN_USERNAME,
+			password: env.ADMIN_PASSWORD,
+			secret: env.JWT_SECRET,
+		});
+		if (!adminAuth) {
 			return new Response(
 				JSON.stringify({
 					error:
-						"后台认证环境变量未配置。请在本地 .dev.vars 或线上 Cloudflare Worker Secrets 中设置 ADMIN_USERNAME、ADMIN_PASSWORD 和不少于 32 个字符的 JWT_SECRET。",
+						"后台认证配置无效。请在当前 Cloudflare Worker 环境设置至少 6 个字符的 ADMIN_USERNAME、ADMIN_PASSWORD，以及至少 32 个字符的 JWT_SECRET。",
 				}),
 				{
 					status: 503,
@@ -87,13 +90,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
 		}
 		const token = context.cookies.get("admin_token")?.value;
 		const credentialVersion = await getCredentialVersion(
-			ADMIN_USERNAME,
-			ADMIN_PASSWORD,
-			JWT_SECRET,
+			adminAuth.username,
+			adminAuth.password,
+			adminAuth.secret,
 		);
 		const isValid = token
-			? await verifyToken(token, JWT_SECRET, {
-					username: ADMIN_USERNAME,
+			? await verifyToken(token, adminAuth.secret, {
+					username: adminAuth.username,
 					credentialVersion,
 				})
 			: null;

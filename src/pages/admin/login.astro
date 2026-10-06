@@ -19,11 +19,11 @@ export const prerender = false;
     <form id="loginForm" class="space-y-5">
       <div>
         <label for="username" class="mb-1 block text-sm font-medium text-gray-700">用户名</label>
-        <input type="text" id="username" autocomplete="username" required class="w-full rounded-lg border border-gray-200 px-4 py-2.5 outline-none focus:border-[#4b9b72] focus:ring-2 focus:ring-[#4b9b72]/20" />
+        <input type="text" id="username" autocomplete="username" minlength="6" required class="w-full rounded-lg border border-gray-200 px-4 py-2.5 outline-none focus:border-[#4b9b72] focus:ring-2 focus:ring-[#4b9b72]/20" />
       </div>
       <div>
         <label for="password" class="mb-1 block text-sm font-medium text-gray-700">密码</label>
-        <input type="password" id="password" autocomplete="current-password" required class="w-full rounded-lg border border-gray-200 px-4 py-2.5 outline-none focus:border-[#4b9b72] focus:ring-2 focus:ring-[#4b9b72]/20" />
+        <input type="password" id="password" autocomplete="current-password" minlength="6" required class="w-full rounded-lg border border-gray-200 px-4 py-2.5 outline-none focus:border-[#4b9b72] focus:ring-2 focus:ring-[#4b9b72]/20" />
       </div>
       <button type="submit" id="submitBtn" class="w-full rounded-lg bg-[#4b9b72] py-2.5 font-semibold text-white transition hover:bg-[#3e855f] disabled:cursor-wait disabled:opacity-60">登 录</button>
       <div id="errMsg" role="alert" class="hidden whitespace-pre-line text-center text-sm text-red-600"></div>

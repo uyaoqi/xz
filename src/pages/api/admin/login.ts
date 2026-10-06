@@ -1,67 +1,91 @@
 import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
-import { createToken, getCredentialVersion } from "../../../utils/auth";
+import {
+	createToken,
+	getCredentialVersion,
+	getValidAdminAuthConfig,
+} from "../../../utils/auth";
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request, cookies }) => {
+	let payload: unknown;
 	try {
-		const { username, password } = await request.json();
-		const { ADMIN_USERNAME, ADMIN_PASSWORD, JWT_SECRET } = env;
-		if (
-			!ADMIN_USERNAME ||
-			!ADMIN_PASSWORD ||
-			!JWT_SECRET ||
-			JWT_SECRET.length < 32
-		) {
-			return new Response(
-				JSON.stringify({
-					error:
-						"后台认证环境变量未配置。请在本地 .dev.vars 或线上 Cloudflare Worker Secrets 中设置 ADMIN_USERNAME、ADMIN_PASSWORD 和不少于 32 个字符的 JWT_SECRET。",
-				}),
-				{
-					status: 503,
-					headers: { "Content-Type": "application/json; charset=utf-8" },
-				},
-			);
-		}
-
-		if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-			const credentialVersion = await getCredentialVersion(
-				ADMIN_USERNAME,
-				ADMIN_PASSWORD,
-				JWT_SECRET,
-			);
-			const token = await createToken(
-				{ username, credentialVersion },
-				JWT_SECRET,
-			);
-			// 写入安全 Cookie
-			cookies.set("admin_token", token, {
-				path: "/",
-				httpOnly: true,
-				secure: new URL(request.url).protocol === "https:",
-				sameSite: "strict",
-				maxAge: 60 * 60 * 24 * 7, // 7 天
-			});
-			// 写入一个非 httpOnly 的标记供前台感知登录状态
-			cookies.set("is_admin_logged", "1", {
-				path: "/",
-				httpOnly: false,
-				secure: new URL(request.url).protocol === "https:",
-				sameSite: "strict",
-				maxAge: 60 * 60 * 24 * 7,
-			});
-
-			return new Response(JSON.stringify({ success: true }), { status: 200 });
-		}
-
-		return new Response(JSON.stringify({ error: "账号或密码错误" }), {
-			status: 400,
-		});
+		payload = await request.json();
 	} catch {
 		return new Response(JSON.stringify({ error: "登录请求无效。" }), {
 			status: 400,
 		});
 	}
+
+	if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+		return new Response(JSON.stringify({ error: "登录请求无效。" }), {
+			status: 400,
+		});
+	}
+
+	const { username, password } = payload as Record<string, unknown>;
+	if (
+		typeof username !== "string" ||
+		typeof password !== "string" ||
+		username.length < 6 ||
+		password.length < 6
+	) {
+		return new Response(
+			JSON.stringify({ error: "账号和密码都必须至少包含 6 个字符。" }),
+			{ status: 400 },
+		);
+	}
+
+	const adminAuth = getValidAdminAuthConfig({
+		username: env.ADMIN_USERNAME,
+		password: env.ADMIN_PASSWORD,
+		secret: env.JWT_SECRET,
+	});
+	if (!adminAuth) {
+		return new Response(
+			JSON.stringify({
+				error:
+					"后台认证配置无效。请在当前 Cloudflare Worker 环境设置至少 6 个字符的 ADMIN_USERNAME、ADMIN_PASSWORD，以及至少 32 个字符的 JWT_SECRET。",
+			}),
+			{
+				status: 503,
+				headers: { "Content-Type": "application/json; charset=utf-8" },
+			},
+		);
+	}
+	const {
+		username: ADMIN_USERNAME,
+		password: ADMIN_PASSWORD,
+		secret: JWT_SECRET,
+	} = adminAuth;
+
+	if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
+		return new Response(JSON.stringify({ error: "账号或密码错误" }), {
+			status: 400,
+		});
+	}
+
+	const credentialVersion = await getCredentialVersion(
+		ADMIN_USERNAME,
+		ADMIN_PASSWORD,
+		JWT_SECRET,
+	);
+	const token = await createToken({ username, credentialVersion }, JWT_SECRET);
+	cookies.set("admin_token", token, {
+		path: "/",
+		httpOnly: true,
+		secure: new URL(request.url).protocol === "https:",
+		sameSite: "strict",
+		maxAge: 60 * 60 * 24 * 7,
+	});
+	cookies.set("is_admin_logged", "1", {
+		path: "/",
+		httpOnly: false,
+		secure: new URL(request.url).protocol === "https:",
+		sameSite: "strict",
+		maxAge: 60 * 60 * 24 * 7,
+	});
+
+	return new Response(JSON.stringify({ success: true }), { status: 200 });
 };
