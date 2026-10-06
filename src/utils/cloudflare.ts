@@ -35,7 +35,6 @@ export interface D1Database {
 
 export interface CloudflareEnv {
 	DB: D1Database;
-	ADMIN_USERNAME?: string;
 	ADMIN_PASSWORD?: string;
 	ADMIN_HOSTNAME?: string;
 	JWT_SECRET?: string;

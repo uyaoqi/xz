@@ -11,7 +11,6 @@ export const prerender = false;
 export const GET: APIRoute = async ({ cookies }) => {
 	const token = cookies.get("admin_token")?.value;
 	const adminAuth = getValidAdminAuthConfig({
-		username: env.ADMIN_USERNAME,
 		password: env.ADMIN_PASSWORD,
 		secret: env.JWT_SECRET,
 	});

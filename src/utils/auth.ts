@@ -1,21 +1,24 @@
 import type { JWTPayload } from "jose";
 import { jwtVerify, SignJWT } from "jose";
 
+export const ADMIN_USERNAME = "admax";
+
+export function hasMinimumPasswordBytes(password: string): boolean {
+	return new TextEncoder().encode(password).byteLength >= 6;
+}
+
 export function getValidAdminAuthConfig(config: {
-	username?: unknown;
 	password?: unknown;
 	secret?: unknown;
 }): { username: string; password: string; secret: string } | null {
 	if (
-		typeof config.username === "string" &&
-		config.username.length >= 6 &&
 		typeof config.password === "string" &&
-		config.password.length >= 6 &&
+		hasMinimumPasswordBytes(config.password) &&
 		typeof config.secret === "string" &&
 		config.secret.length >= 32
 	) {
 		return {
-			username: config.username,
+			username: ADMIN_USERNAME,
 			password: config.password,
 			secret: config.secret,
 		};

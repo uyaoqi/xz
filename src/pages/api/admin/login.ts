@@ -4,6 +4,7 @@ import {
 	createToken,
 	getCredentialVersion,
 	getValidAdminAuthConfig,
+	hasMinimumPasswordBytes,
 } from "../../../utils/auth";
 
 export const prerender = false;
@@ -28,17 +29,17 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 	if (
 		typeof username !== "string" ||
 		typeof password !== "string" ||
-		username.length < 6 ||
-		password.length < 6
+		!hasMinimumPasswordBytes(password)
 	) {
 		return new Response(
-			JSON.stringify({ error: "账号和密码都必须至少包含 6 个字符。" }),
+			JSON.stringify({
+				error: "请使用固定管理员账号 admax，密码至少为 6 个字节。",
+			}),
 			{ status: 400 },
 		);
 	}
 
 	const adminAuth = getValidAdminAuthConfig({
-		username: env.ADMIN_USERNAME,
 		password: env.ADMIN_PASSWORD,
 		secret: env.JWT_SECRET,
 	});
@@ -46,7 +47,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 		return new Response(
 			JSON.stringify({
 				error:
-					"后台认证配置无效。请在当前 Cloudflare Worker 环境设置至少 6 个字符的 ADMIN_USERNAME、ADMIN_PASSWORD，以及至少 32 个字符的 JWT_SECRET。",
+					"后台认证配置无效。请在当前 Cloudflare Worker 环境设置至少 6 个字节的 ADMIN_PASSWORD，以及至少 32 个字符的 JWT_SECRET。",
 			}),
 			{
 				status: 503,
