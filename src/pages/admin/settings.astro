@@ -1,0 +1,191 @@
+---
+export const prerender = false;
+---
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>前端配置 - 管理后台</title>
+  <script is:inline src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-[#f7f7f2] text-gray-800">
+  <div class="mx-auto max-w-7xl px-4 py-5 sm:px-6">
+    <nav class="mb-5 flex flex-wrap items-center gap-1 rounded-2xl bg-white p-3 shadow-sm sm:p-4" aria-label="后台导航">
+      <a href="/" data-no-swup class="rounded-lg px-3 py-2.5 font-medium text-gray-700 hover:bg-gray-50 hover:text-[#438f69]">首页</a>
+      <a href="/admin/" data-no-swup class="rounded-lg px-3 py-2.5 font-medium text-gray-700 hover:bg-gray-50 hover:text-[#438f69]">文章管理</a>
+      <a href="/admin/edit/" data-no-swup class="rounded-lg px-3 py-2.5 font-medium text-gray-700 hover:bg-gray-50 hover:text-[#438f69]">新增文章</a>
+      <a href="/admin/settings/" data-no-swup aria-current="page" class="rounded-lg bg-[#4b9b72] px-3 py-2.5 font-medium text-white">前端配置</a>
+      <a href="/articles/" data-no-swup class="rounded-lg px-3 py-2.5 font-medium text-gray-700 hover:bg-gray-50 hover:text-[#438f69]">文章库</a>
+      <button id="logoutBtn" class="ml-auto rounded-lg px-3 py-2.5 font-medium text-gray-600 hover:bg-red-50 hover:text-red-600">退出</button>
+    </nav>
+
+    <header class="mb-5 rounded-2xl bg-white p-5 shadow-sm sm:p-6">
+      <h1 class="text-2xl font-bold text-[#4b9b72]">前端功能模块配置</h1>
+      <p class="mt-1 text-sm text-gray-500">配置保存在 Cloudflare D1，保存后前台请求即读取新配置，无需重新部署。配置使用 JSON 编辑，字段名和值类型需保持正确。</p>
+    </header>
+
+    <main class="grid min-h-[620px] grid-cols-1 gap-5 lg:grid-cols-[270px_minmax(0,1fr)]">
+      <aside class="rounded-2xl bg-white p-4 shadow-sm">
+        <h2 class="mb-3 px-2 text-sm font-semibold uppercase tracking-wide text-gray-400">功能模块</h2>
+        <div id="moduleList" class="space-y-1" aria-label="配置模块列表">
+          <p class="p-3 text-sm text-gray-400">正在载入配置模块…</p>
+        </div>
+      </aside>
+
+      <section class="flex min-w-0 flex-col rounded-2xl bg-white p-4 shadow-sm sm:p-6">
+        <div class="mb-4 flex flex-wrap items-start justify-between gap-4 border-b border-gray-100 pb-4">
+          <div>
+            <p id="moduleGroup" class="text-xs font-semibold uppercase tracking-wide text-gray-400"></p>
+            <h2 id="moduleTitle" class="mt-1 text-xl font-bold">选择一个功能模块</h2>
+            <p id="moduleKey" class="mt-1 font-mono text-xs text-gray-400"></p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="resetBtn" type="button" disabled class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40">恢复默认</button>
+            <button id="saveBtn" type="button" disabled class="rounded-lg bg-[#4b9b72] px-4 py-2 text-sm font-semibold text-white hover:bg-[#3e855f] disabled:cursor-not-allowed disabled:opacity-50">保存配置</button>
+          </div>
+        </div>
+        <label for="configEditor" class="mb-2 text-sm font-semibold text-gray-700">JSON 配置</label>
+        <textarea id="configEditor" spellcheck="false" disabled aria-label="模块 JSON 配置" class="min-h-[460px] w-full flex-1 resize-y rounded-xl border border-gray-200 bg-[#fbfcfa] p-4 font-mono text-sm leading-6 outline-none focus:border-[#4b9b72] focus:ring-2 focus:ring-[#4b9b72]/15 disabled:opacity-50"></textarea>
+        <p id="status" class="mt-3 min-h-5 text-sm text-gray-500" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+    <footer class="py-5 text-center text-sm text-gray-500">博客 / 管理后台</footer>
+  </div>
+
+  <script>
+    interface ConfigModule {
+      key: string;
+      label: string;
+      group: string;
+      value: unknown;
+    }
+
+    const moduleList = document.getElementById('moduleList')!;
+    const editor = document.getElementById('configEditor') as HTMLTextAreaElement;
+    const title = document.getElementById('moduleTitle')!;
+    const group = document.getElementById('moduleGroup')!;
+    const keyLabel = document.getElementById('moduleKey')!;
+    const status = document.getElementById('status')!;
+    const saveButton = document.getElementById('saveBtn') as HTMLButtonElement;
+    const resetButton = document.getElementById('resetBtn') as HTMLButtonElement;
+    let modules: ConfigModule[] = [];
+    let selectedKey = '';
+
+    function renderModules() {
+      moduleList.replaceChildren();
+      let previousGroup = '';
+      for (const module of modules) {
+        if (module.group !== previousGroup) {
+          const heading = document.createElement('p');
+          heading.className = 'px-3 pb-1 pt-4 text-xs font-semibold text-gray-400 first:pt-0';
+          heading.textContent = module.group;
+          moduleList.append(heading);
+          previousGroup = module.group;
+        }
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.key = module.key;
+        button.className = `block w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+          module.key === selectedKey
+            ? 'bg-[#eaf4ed] font-semibold text-[#438f69]'
+            : 'text-gray-700 hover:bg-gray-50'
+        }`;
+        button.textContent = module.label;
+        button.addEventListener('click', () => selectModule(module.key));
+        moduleList.append(button);
+      }
+    }
+
+    function selectModule(key: string) {
+      const module = modules.find((item) => item.key === key);
+      if (!module) return;
+      selectedKey = key;
+      title.textContent = module.label;
+      group.textContent = module.group;
+      keyLabel.textContent = module.key;
+      editor.value = JSON.stringify(module.value, null, 2);
+      editor.disabled = false;
+      saveButton.disabled = false;
+      resetButton.disabled = false;
+      status.textContent = '';
+      renderModules();
+    }
+
+    async function loadModules() {
+      const response = await fetch('/api/admin/settings');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '配置模块加载失败。');
+      modules = data.modules;
+      renderModules();
+      if (!selectedKey && modules.length) selectModule(modules[0].key);
+      else if (selectedKey) selectModule(selectedKey);
+    }
+
+    saveButton.addEventListener('click', async () => {
+      if (!selectedKey) return;
+      let config: unknown;
+      try {
+        config = JSON.parse(editor.value);
+      } catch {
+        status.textContent = 'JSON 格式无效，请检查括号、逗号和引号。';
+        status.className = 'mt-3 min-h-5 text-sm text-red-600';
+        return;
+      }
+
+      saveButton.disabled = true;
+      status.textContent = '正在保存…';
+      status.className = 'mt-3 min-h-5 text-sm text-gray-500';
+      try {
+        const response = await fetch('/api/admin/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ configKey: selectedKey, config }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '配置保存失败。');
+        await loadModules();
+        status.textContent = '保存成功。刷新前台页面即可查看最新配置。';
+        status.className = 'mt-3 min-h-5 text-sm text-green-700';
+      } catch (error) {
+        status.textContent = error instanceof Error ? error.message : '配置保存失败。';
+        status.className = 'mt-3 min-h-5 text-sm text-red-600';
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+
+    resetButton.addEventListener('click', async () => {
+      if (!selectedKey || !window.confirm('确定恢复此模块的代码默认配置吗？')) return;
+      resetButton.disabled = true;
+      try {
+        const response = await fetch(
+          `/api/admin/settings?key=${encodeURIComponent(selectedKey)}`,
+          { method: 'DELETE' },
+        );
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '恢复默认配置失败。');
+        await loadModules();
+        status.textContent = '已恢复代码默认配置。';
+        status.className = 'mt-3 min-h-5 text-sm text-green-700';
+      } catch (error) {
+        status.textContent = error instanceof Error ? error.message : '恢复默认配置失败。';
+        status.className = 'mt-3 min-h-5 text-sm text-red-600';
+      } finally {
+        resetButton.disabled = false;
+      }
+    });
+
+    document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+      await fetch('/api/admin/logout', { method: 'POST' });
+      window.location.href = '/admin/login/';
+    });
+
+    loadModules().catch((error) => {
+      moduleList.textContent = error instanceof Error ? error.message : '配置加载失败。';
+      moduleList.className = 'rounded-lg bg-red-50 p-3 text-sm text-red-700';
+    });
+  </script>
+</body>
+</html>

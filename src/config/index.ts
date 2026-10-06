@@ -34,12 +34,20 @@ export { coverImageConfig } from "./coverImageConfig"; // 封面图配置
 export { expressiveCodeConfig } from "./expressiveCodeConfig"; // 代码高亮配置
 export { fontConfig } from "./fontConfig"; // 字体配置
 export { footerConfig } from "./footerConfig"; // 页脚配置
-export { friendsPageConfig, getEnabledFriends } from "./friendsConfig"; // 友链配置
+export {
+	friendsConfig,
+	friendsPageConfig,
+	getEnabledFriends,
+} from "./friendsConfig"; // 友链配置
 export { galleryConfig } from "./galleryConfig"; // 相册配置
 export { licenseConfig } from "./licenseConfig"; // 许可证配置
 // 组件配置
 export { musicPlayerConfig } from "./musicConfig"; // 音乐播放器配置
-export { navBarConfig, navBarSearchConfig } from "./navBarConfig"; // 导航栏配置与搜索配置
+export {
+	getDynamicNavBarConfig,
+	navBarConfig,
+	navBarSearchConfig,
+} from "./navBarConfig"; // 导航栏配置与搜索配置
 export { live2dModelConfig, spineModelConfig } from "./pioConfig"; // 看板娘配置
 export { profileConfig } from "./profileConfig"; // 用户资料配置
 export { sakuraConfig } from "./sakuraConfig"; // 樱花特效配置

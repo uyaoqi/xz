@@ -27,18 +27,30 @@ import { licenseConfig } from "@/config/licenseConfig";
 import { profileConfig } from "@/config/profileConfig";
 import { siteConfig } from "@/config/siteConfig";
 import { sponsorConfig } from "@/config/sponsorConfig";
+import { getCloudflareEnv } from "@/utils/cloudflare";
 import { formatDateToYYYYMMDD } from "@/utils/date-utils";
 import { getApiUrlList, processCoverImageSync } from "@/utils/image-utils";
 import { url } from "@/utils/url-utils";
-import { getCloudflareEnv } from "@/utils/cloudflare";
 
 export const prerender = false;
 
 const slug = Astro.params.slug ?? "";
-const { DB } = getCloudflareEnv();
-const managedPost = await DB.prepare("SELECT deleted, draft FROM posts WHERE slug = ?")
-	.bind(slug)
-	.first<{ deleted: number; draft: number }>();
+const entry = (await getCollection("posts")).find(
+	(post) => removeFileExtension(post.id) === slug,
+);
+let managedPost: { deleted: number; draft: number } | null = null;
+let databaseUnavailable = false;
+try {
+	const { DB } = getCloudflareEnv();
+	managedPost = await DB.prepare(
+		"SELECT deleted, draft FROM posts WHERE slug = ?",
+	)
+		.bind(slug)
+		.first<{ deleted: number; draft: number }>();
+} catch (error) {
+	console.error(`Failed to read D1 post state for "${slug}":`, error);
+	databaseUnavailable = true;
+}
 
 if (managedPost?.deleted || managedPost?.draft) {
 	return Astro.redirect("/404/");
@@ -48,9 +60,13 @@ if (managedPost) {
 	return Astro.rewrite(`/articles/${encodeURIComponent(slug)}/`);
 }
 
-const entry = (await getCollection("posts")).find(
-	(post) => removeFileExtension(post.id) === slug,
-);
+if (databaseUnavailable && !entry) {
+	return new Response("文章数据库暂时不可用，请稍后重试。", {
+		status: 503,
+		headers: { "Content-Type": "text/plain; charset=utf-8" },
+	});
+}
+
 if (!entry || (import.meta.env.PROD && entry.data.draft)) {
 	return Astro.redirect("/404/");
 }

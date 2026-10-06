@@ -1,21 +1,33 @@
 ---
 import { getCollection } from "astro:content";
 import MainGridLayout from "@layouts/MainGridLayout.astro";
-import { getCloudflareEnv, type PostRecord } from "@/utils/cloudflare";
+import { getOptionalCloudflareEnv, type PostRecord } from "@/utils/cloudflare";
 import { getPostUrlBySlug } from "@/utils/url-utils";
 
 export const prerender = false;
 
-const { DB } = getCloudflareEnv();
-const [{ results }, sourcePosts] = await Promise.all([
-	DB.prepare("SELECT * FROM posts ORDER BY published DESC, updated_at DESC")
-		.all<PostRecord>(),
-	getCollection("posts"),
-]);
+const { DB } = getOptionalCloudflareEnv();
+const sourcePosts = await getCollection("posts");
+let results: PostRecord[] = [];
+if (DB) {
+	try {
+		({ results } = await DB.prepare(
+			"SELECT * FROM posts ORDER BY published DESC, updated_at DESC",
+		).all<PostRecord>());
+	} catch (error) {
+		console.error("Failed to read dynamic articles from D1:", error);
+	}
+}
 
 const posts = new Map<
 	string,
-	{ slug: string; title: string; published: string; draft: boolean; password: boolean }
+	{
+		slug: string;
+		title: string;
+		published: string;
+		draft: boolean;
+		password: boolean;
+	}
 >();
 for (const post of sourcePosts) {
 	posts.set(post.id.replace(/\.(md|mdx)$/i, ""), {
@@ -31,7 +43,18 @@ for (const post of results) {
 		posts.delete(post.slug);
 		continue;
 	}
-	const metadata = JSON.parse(post.metadata) as Record<string, unknown>;
+	let metadata: Record<string, unknown>;
+	try {
+		const parsed: unknown = JSON.parse(post.metadata);
+		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+			throw new Error("Article metadata must be a JSON object.");
+		}
+		metadata = parsed as Record<string, unknown>;
+	} catch (error) {
+		console.error(`Invalid metadata for article "${post.slug}":`, error);
+		posts.delete(post.slug);
+		continue;
+	}
 	posts.set(post.slug, {
 		slug: post.slug,
 		title: post.title,

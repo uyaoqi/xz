@@ -1,43 +1,73 @@
 ---
 import { getCollection } from "astro:content";
-import { marked } from "marked";
-import sanitizeHtml from "sanitize-html";
-import MainGridLayout from "@layouts/MainGridLayout.astro";
 import Markdown from "@components/common/Markdown.astro";
 import PostMetadata from "@components/layout/PostMeta.astro";
+import MainGridLayout from "@layouts/MainGridLayout.astro";
+import { marked } from "marked";
+import sanitizeHtml from "sanitize-html";
 import { getCloudflareEnv, type PostRecord } from "@/utils/cloudflare";
 
 export const prerender = false;
 
 const slug = Astro.params.slug ?? "";
-const { DB } = getCloudflareEnv();
-const post = await DB.prepare("SELECT * FROM posts WHERE slug = ?")
-	.bind(slug)
-	.first<PostRecord>();
-
-if (!post || post.deleted || post.draft) {
-	Astro.response.status = 404;
+let post: PostRecord | null;
+try {
+	const { DB } = getCloudflareEnv();
+	post = await DB.prepare("SELECT * FROM posts WHERE slug = ?")
+		.bind(slug)
+		.first<PostRecord>();
+} catch (error) {
+	console.error(`Failed to read article "${slug}" from D1:`, error);
+	return new Response(
+		"文章数据库暂时不可用，请检查 Cloudflare D1 绑定后重试。",
+		{
+			status: 503,
+			headers: { "Content-Type": "text/plain; charset=utf-8" },
+		},
+	);
 }
 
 const sourceEntry = (await getCollection("posts")).find(
 	(entry) => entry.id.replace(/\.(md|mdx)$/i, "") === slug,
 );
 const sourceData = sourceEntry?.data;
-const metadata = post
-	? (JSON.parse(post.metadata) as Record<string, unknown>)
-	: {};
+let metadata: Record<string, unknown> = {};
+let metadataInvalid = false;
+if (post) {
+	try {
+		const parsed: unknown = JSON.parse(post.metadata);
+		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+			throw new Error("Article metadata must be a JSON object.");
+		}
+		metadata = parsed as Record<string, unknown>;
+	} catch (error) {
+		console.error(`Invalid metadata for article "${slug}":`, error);
+		metadataInvalid = true;
+	}
+}
 const passwordProtected = Boolean(metadata.password || sourceData?.password);
+const articleAvailable =
+	!!post &&
+	!post.deleted &&
+	!post.draft &&
+	!passwordProtected &&
+	!metadataInvalid;
+if (metadataInvalid) {
+	Astro.response.status = 500;
+} else if (!articleAvailable) {
+	Astro.response.status = 404;
+}
 const title = post?.title ?? "文章不存在";
 const published = post ? new Date(post.published) : new Date();
 const tags = Array.isArray(metadata.tags)
 	? metadata.tags.filter((tag): tag is string => typeof tag === "string")
-	: sourceData?.tags ?? [];
+	: (sourceData?.tags ?? []);
 const category =
 	typeof metadata.category === "string"
 		? metadata.category
 		: sourceData?.category || undefined;
 const body = post?.content ?? "";
-const renderedMarkdown = post && !post.deleted && !post.draft && !passwordProtected
+const renderedMarkdown = articleAvailable
 	? sanitizeHtml(await marked.parse(body), {
 			allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img"]),
 			allowedAttributes: {
@@ -51,7 +81,7 @@ const renderedMarkdown = post && !post.deleted && !post.draft && !passwordProtec
 
 <MainGridLayout title={title} description={String(metadata.description ?? "")}>
   {
-    post && !post.deleted && !post.draft && !passwordProtected ? (
+    articleAvailable ? (
       <article class="card-base rounded-(--radius-large) p-6 md:p-9">
         <h1 class="text-3xl md:text-4xl font-bold mb-4">{title}</h1>
         <PostMetadata published={published} tags={tags} category={category} id={slug} />
@@ -61,8 +91,14 @@ const renderedMarkdown = post && !post.deleted && !post.draft && !passwordProtec
       </article>
     ) : (
       <section class="card-base rounded-(--radius-large) p-6 md:p-9">
-        <h1 class="text-3xl font-bold">文章不存在</h1>
-        <p class="mt-3">该文章可能已删除、尚未发布或地址无效。</p>
+        <h1 class="text-3xl font-bold">
+          {metadataInvalid ? "文章暂时无法读取" : "文章不存在"}
+        </h1>
+        <p class="mt-3">
+          {metadataInvalid
+            ? "文章数据格式异常，请联系站点管理员检查 D1 中的文章元数据。"
+            : "该文章可能已删除、尚未发布或地址无效。"}
+        </p>
       </section>
     )
   }

@@ -8,7 +8,12 @@ import {
 	WALLPAPER_NONE,
 	WALLPAPER_OVERLAY,
 } from "@constants/constants";
-import type { LIGHT_DARK_MODE, WALLPAPER_MODE } from "@/types/config";
+import type {
+	BackgroundWallpaperConfig,
+	LIGHT_DARK_MODE,
+	SiteConfig,
+	WALLPAPER_MODE,
+} from "@/types/config";
 import {
 	backgroundWallpaper,
 	expressiveCodeConfig,
@@ -22,6 +27,14 @@ declare global {
 		initSemifullScrollDetection?: () => void;
 		semifullScrollHandler?: () => void;
 	}
+}
+
+export function initializeRuntimeSettings(settings: {
+	backgroundWallpaper: BackgroundWallpaperConfig;
+	siteConfig: SiteConfig;
+}): void {
+	Object.assign(backgroundWallpaper, settings.backgroundWallpaper);
+	Object.assign(siteConfig, settings.siteConfig);
 }
 
 export function getDefaultHue(): number {

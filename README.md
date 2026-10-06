@@ -144,7 +144,7 @@
 
 ### Cloudflare Workers 与在线 Markdown 编辑器
 
-本项目通过 **Cloudflare Workers** 部署（不是 Cloudflare Pages），文章保存在 Cloudflare D1。编辑器不上传媒体文件，也不需要配置 Cloudflare R2：在“插入图片链接”或“插入视频链接”处粘贴你自己的图库/视频托管服务提供的 URL 即可；图片插入为 Markdown 图片，视频插入为可点击链接。
+本项目通过 **Cloudflare Workers** 部署（不是 Cloudflare Pages），文章和前端运行时配置保存在 Cloudflare D1。编辑器不上传媒体文件，也不需要配置 Cloudflare R2：在“插入图片链接”或“插入视频链接”处粘贴你自己的图库/视频托管服务提供的 URL 即可；图片插入为 Markdown 图片，视频插入为可点击链接。
 
 #### 一、准备 Cloudflare 资源
 
@@ -222,7 +222,8 @@ Wrangler 会在 Cloudflare 中创建/更新 Worker。首次部署后，按“二
 
 #### 五、登录、编辑和媒体链接
 
-- 后台登录地址：`/admin/login/`；登录后管理文章。
+- 后台登录地址：`/admin/login/`；登录后管理文章和前端配置。
+- 前端功能模块配置：`/admin/settings/`；修改结果保存在 D1，后续前台请求无需重新部署即可读取。
 - 动态文章库：`/articles/`；通过 `/posts/{slug}` 访问对应文章。
 - 新建或编辑文章时，在工具栏点“插入图片链接”或“插入视频链接”，粘贴外部图库提供的完整 `https://` URL。图片按 Markdown 图片显示；视频以可点击链接呈现。也可在正文中直接粘贴 URL 或写标准 Markdown。
 - 图片/视频文件由你选择的外部图库或视频托管平台负责存储与访问。确认其链接允许从你的网站域名加载；私有链接、带时效的临时链接或要求登录的链接可能无法公开显示。
@@ -236,9 +237,11 @@ Wrangler 会在 Cloudflare 中创建/更新 Worker。首次部署后，按“二
 ADMIN_USERNAME=your-admin-name
 ADMIN_PASSWORD=your-strong-password
 JWT_SECRET=replace-with-a-random-secret-at-least-32-characters-long
+# 可选：绑定专用管理子域名，例如 admin.example.com
+ADMIN_HOSTNAME=admin.example.com
 ```
 
-请勿把真实账号、密码或 JWT secret 提交到 Git。线上环境请在 Cloudflare Worker 的 **Settings → Variables and Secrets** 添加上述三个加密 Secret；仅配置 GitHub Actions Secrets 或 `.env` 不会自动设置 Worker Secrets。
+请勿把真实账号、密码或 JWT secret 提交到 Git。线上环境请在 Cloudflare Worker 的 **Settings → Variables and Secrets** 添加 `ADMIN_USERNAME`、`ADMIN_PASSWORD` 和 `JWT_SECRET` 三个加密 Secret；`ADMIN_HOSTNAME` 是可选的普通变量。若不设置 `ADMIN_HOSTNAME`，主机名以 `admin.` 开头的域名会自动作为管理域名。仅配置 GitHub Actions Secrets 或 `.env` 不会自动设置 Worker Secrets。管理员密码变更后，既有登录令牌会立即失效，需重新登录。
 
 本地开发时先创建本地 D1 表，再启动 Worker 模拟环境：
 

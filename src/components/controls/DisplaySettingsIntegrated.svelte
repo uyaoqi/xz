@@ -22,6 +22,7 @@ import {
 	getStoredOverlayOpacity,
 	getStoredWallpaperMode,
 	getStoredWavesEnabled,
+	initializeRuntimeSettings,
 	setBannerCarouselEnabled,
 	setBannerTitleEnabled,
 	setHue,
@@ -33,8 +34,20 @@ import {
 } from "@utils/setting-utils";
 import { onMount } from "svelte";
 import Icon from "@/components/common/Icon.svelte";
-import { backgroundWallpaper, siteConfig } from "@/config";
-import type { WALLPAPER_MODE } from "@/types/config";
+import type {
+	BackgroundWallpaperConfig,
+	SiteConfig,
+	WALLPAPER_MODE,
+} from "@/types/config";
+
+let {
+	backgroundWallpaper,
+	siteConfig,
+}: {
+	backgroundWallpaper: BackgroundWallpaperConfig;
+	siteConfig: SiteConfig;
+} = $props();
+initializeRuntimeSettings({ backgroundWallpaper, siteConfig });
 
 type OverlaySliderItem = {
 	key: "opacity" | "blur" | "cardOpacity";

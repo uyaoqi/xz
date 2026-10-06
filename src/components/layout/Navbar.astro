@@ -161,7 +161,11 @@ if (isLocalSrcLogo) {
             </div>
         )}
         <NavMenuPanel links={links}></NavMenuPanel>
-        <DisplaySettings client:load></DisplaySettings>
+        <DisplaySettings
+            backgroundWallpaper={backgroundWallpaper}
+            siteConfig={siteConfig}
+            client:load
+        />
     </div>
 </div>
 

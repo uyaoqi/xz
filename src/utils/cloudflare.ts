@@ -37,6 +37,7 @@ export interface CloudflareEnv {
 	DB: D1Database;
 	ADMIN_USERNAME?: string;
 	ADMIN_PASSWORD?: string;
+	ADMIN_HOSTNAME?: string;
 	JWT_SECRET?: string;
 }
 
@@ -44,5 +45,9 @@ export function getCloudflareEnv(): CloudflareEnv {
 	if (!env.DB) {
 		throw new Error("Cloudflare D1 binding DB is not configured.");
 	}
+	return env;
+}
+
+export function getOptionalCloudflareEnv(): Partial<CloudflareEnv> {
 	return env;
 }

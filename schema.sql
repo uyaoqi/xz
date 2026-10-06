@@ -18,3 +18,9 @@ CREATE TABLE IF NOT EXISTS posts (
 );
 
 CREATE INDEX IF NOT EXISTS posts_published_idx ON posts (draft, published DESC);
+
+CREATE TABLE IF NOT EXISTS site_settings (
+  config_key TEXT PRIMARY KEY NOT NULL,
+  config_value TEXT NOT NULL,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
