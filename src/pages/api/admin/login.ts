@@ -1,20 +1,24 @@
-export const prerender = false;
+import { env } from 'cloudflare:workers';
 import type { APIRoute } from 'astro';
 import { createToken } from '../../../utils/auth';
+
+export const prerender = false;
 
 export const POST: APIRoute = async ({ request, cookies }) => {
   try {
     const { username, password } = await request.json();
-    const correctUser = process.env.ADMIN_USERNAME || 'admin';
-    const correctPass = process.env.ADMIN_PASSWORD || 'admin';
+    const { ADMIN_USERNAME, ADMIN_PASSWORD, JWT_SECRET } = env;
+    if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !JWT_SECRET || JWT_SECRET.length < 32) {
+      return new Response(JSON.stringify({ error: '后台认证环境变量未配置。' }), { status: 503 });
+    }
 
-    if (username === correctUser && password === correctPass) {
-      const token = await createToken({ username });
+    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+      const token = await createToken({ username }, JWT_SECRET);
       // 写入安全 Cookie
       cookies.set('admin_token', token, {
         path: '/',
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: new URL(request.url).protocol === 'https:',
         sameSite: 'strict',
         maxAge: 60 * 60 * 24 * 7, // 7 天
       });
@@ -22,7 +26,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       cookies.set('is_admin_logged', '1', {
         path: '/',
         httpOnly: false,
-        secure: process.env.NODE_ENV === 'production',
+        secure: new URL(request.url).protocol === 'https:',
         sameSite: 'strict',
         maxAge: 60 * 60 * 24 * 7,
       });
@@ -31,7 +35,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     }
 
     return new Response(JSON.stringify({ error: '账号或密码错误' }), { status: 400 });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+  } catch {
+    return new Response(JSON.stringify({ error: '登录请求无效。' }), { status: 400 });
   }
 };

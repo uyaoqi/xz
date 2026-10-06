@@ -1,0 +1,74 @@
+---
+import { getCollection } from "astro:content";
+import MainGridLayout from "@layouts/MainGridLayout.astro";
+import { getCloudflareEnv, type PostRecord } from "@/utils/cloudflare";
+import { getPostUrlBySlug } from "@/utils/url-utils";
+
+export const prerender = false;
+
+const { DB } = getCloudflareEnv();
+const [{ results }, sourcePosts] = await Promise.all([
+	DB.prepare("SELECT * FROM posts ORDER BY published DESC, updated_at DESC")
+		.all<PostRecord>(),
+	getCollection("posts"),
+]);
+
+const posts = new Map<
+	string,
+	{ slug: string; title: string; published: string; draft: boolean; password: boolean }
+>();
+for (const post of sourcePosts) {
+	posts.set(post.id.replace(/\.(md|mdx)$/i, ""), {
+		slug: post.id.replace(/\.(md|mdx)$/i, ""),
+		title: post.data.title,
+		published: post.data.published.toISOString().slice(0, 10),
+		draft: post.data.draft,
+		password: Boolean(post.data.password),
+	});
+}
+for (const post of results) {
+	if (post.deleted) {
+		posts.delete(post.slug);
+		continue;
+	}
+	const metadata = JSON.parse(post.metadata) as Record<string, unknown>;
+	posts.set(post.slug, {
+		slug: post.slug,
+		title: post.title,
+		published: post.published,
+		draft: Boolean(post.draft),
+		password: Boolean(metadata.password),
+	});
+}
+
+const publishedPosts = [...posts.values()]
+	.filter((post) => !post.draft && !post.password)
+	.sort((a, b) => (a.published < b.published ? 1 : -1));
+---
+
+<MainGridLayout title="文章库" description="所有已发布的 Markdown 文章">
+  <section class="card-base rounded-(--radius-large) p-6 md:p-9">
+    <h1 class="text-3xl font-bold mb-6">文章库</h1>
+    {
+      publishedPosts.length ? (
+        <ul class="flex flex-col divide-y divide-black/10 dark:divide-white/10">
+          {publishedPosts.map((post) => (
+            <li class="py-4 first:pt-0 last:pb-0">
+              <a
+                class="text-xl font-semibold hover:text-(--primary)"
+                href={getPostUrlBySlug(post.slug)}
+              >
+                {post.title}
+              </a>
+              <p class="text-sm text-black/50 dark:text-white/50 mt-1">
+                {post.published}
+              </p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p class="text-black/60 dark:text-white/60">暂无已发布文章。</p>
+      )
+    }
+  </section>
+</MainGridLayout>

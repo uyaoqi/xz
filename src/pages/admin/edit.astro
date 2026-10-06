@@ -71,7 +71,9 @@ export const prerender = false;
     <button type="button" onclick="insertSyntax('> 引用文本')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">引用</button>
     <button type="button" onclick="insertSyntax('```javascript\\n// code here\\n```')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">代码块</button>
     <span class="text-gray-400">|</span>
-    <span class="text-blue-600">💡 提示：在编辑器内直接按 Ctrl+V (或 Cmd+V) 即可自动上传剪贴板图片</span>
+    <button type="button" onclick="insertMediaLink('image')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">插入图片链接</button>
+    <button type="button" onclick="insertMediaLink('video')" class="px-2 py-1 bg-white border rounded hover:bg-gray-100">插入视频链接</button>
+    <span class="text-blue-600">💡 粘贴图库提供的图片或视频 URL，不会上传文件</span>
   </div>
 
   <!-- 主编辑双栏区 -->
@@ -81,7 +83,7 @@ export const prerender = false;
       <textarea
         id="markdownInput"
         class="w-full h-full p-6 outline-none resize-none font-mono text-sm leading-relaxed"
-        placeholder="在此输入 Markdown 正文... 支持直接拖拽或粘贴图片"
+        placeholder="在此输入 Markdown 正文... 图片和视频请粘贴链接，或使用上方按钮插入"
       ></textarea>
     </div>
 
@@ -116,42 +118,33 @@ export const prerender = false;
       input.focus();
     };
 
-    // 粘贴上传剪贴板图片核心逻辑
-    input.addEventListener('paste', async (e) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
+    (window as any).insertMediaLink = (type: 'image' | 'video') => {
+      const rawUrl = window.prompt(`粘贴${type === 'image' ? '图片' : '视频'}链接 (https://...)`);
+      if (rawUrl === null) return;
 
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-          e.preventDefault();
-          const file = items[i].getAsFile();
-          if (!file) continue;
-
-          const placeholder = `\\n!\[正在上传图片...]()\\n`;
-          const start = input.selectionStart;
-          input.setRangeText(placeholder, start, start, 'end');
-          updatePreview();
-
-          const formData = new FormData();
-          formData.append('file', file);
-
-          try {
-            const res = await fetch('/api/admin/upload', { method: 'POST', body: formData });
-            const data = await res.json();
-            if (res.ok && data.url) {
-              input.value = input.value.replace(placeholder, `\\n!\[](${data.url})\\n`);
-            } else {
-              alert('图片上传失败: ' + (data.error || '未知原因'));
-              input.value = input.value.replace(placeholder, '');
-            }
-          } catch (err) {
-            alert('上传过程出现异常');
-            input.value = input.value.replace(placeholder, '');
-          }
-          updatePreview();
-        }
+      let url: URL;
+      try {
+        url = new URL(rawUrl.trim());
+      } catch {
+        alert('请输入有效的完整链接。');
+        return;
       }
-    });
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+        alert('媒体链接只支持 HTTP 或 HTTPS。');
+        return;
+      }
+
+      const label = type === 'image'
+        ? (window.prompt('图片说明 (可选)') || '图片')
+        : (window.prompt('视频链接文字 (可选)') || '观看视频');
+      const safeUrl = url.toString();
+      const safeLabel = label.replace(/[\]\\]/g, '\\$&').replace(/[\r\n]/g, ' ');
+      (window as any).insertSyntax(
+        type === 'image'
+          ? `![${safeLabel}](<${safeUrl}>)`
+          : `[${safeLabel}](<${safeUrl}>)`
+      );
+    };
 
     // 载入已有文章数据（如果是编辑模式）
     const params = new URLSearchParams(window.location.search);
@@ -206,7 +199,7 @@ export const prerender = false;
 
       saveBtn.disabled = true;
       saveBtn.innerText = '正在保存发布...';
-      saveStatus.innerText = '正在生成并提交...';
+      saveStatus.innerText = '正在保存到 Cloudflare D1...';
 
       try {
         const res = await fetch('/api/admin/posts', {
@@ -228,7 +221,7 @@ export const prerender = false;
         });
         const data = await res.json();
         if (res.ok) {
-          alert(`保存成功！${data.triggeredDeploy ? '已全自动触发线上构建更新，稍后即可在前台看到！' : ''}`);
+          alert('文章已保存到 Cloudflare D1。');
           window.location.href = '/admin/';
         } else {
           alert('保存失败: ' + (data.error || '未知错误'));

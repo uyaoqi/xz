@@ -34,19 +34,15 @@ import rehypeExternalLinks from "./src/plugins/rehype-external-links.mjs";
 import rehypeFigure from "./src/plugins/rehype-figure.mjs";
 import { remarkImageGrid } from "./src/plugins/remark-image-grid.js";
 
-// astro.config.mjs
-import { defineConfig } from 'astro/config';
-// 根据你的部署目标保留或添加对应适配器，例如 node 或 vercel
-import node from '@astrojs/node'; 
-// 若为 node 部署则需 pnpm add @astrojs/node
-
+import cloudflare from '@astrojs/cloudflare';
 
 // https://astro.build/config
 export default defineConfig({
 	site: siteConfig.site_url,
-	
-	output: 'static', 
-  	adapter: node({ mode: 'standalone' }),
+	output: "static",
+	adapter: cloudflare({
+		prerenderEnvironment: "node",
+	}),
 
 	base: "/",
 	trailingSlash: "ignore",

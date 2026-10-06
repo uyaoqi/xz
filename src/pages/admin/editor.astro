@@ -1,3 +1,6 @@
+---
+export const prerender = false;
+---
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -31,15 +34,18 @@
       background: rgba(156, 163, 175, 0.5);
       border-radius: 3px;
     }
-    /* 针对预览区域的基础 Markdown 样式修饰 */
-    .preview-content h1 { @apply text-2xl font-size：1.5rem; line-height：2rem; }
-    .preview-content h2 { @apply text-xl font-bold my-3; }
-    .preview-content p { @apply my-2 leading-relaxed text-sm; }
-    .preview-content code { @apply bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded text-xs font-mono; }
-    .preview-content pre { @apply bg-gray-100 dark:bg-gray-800 p-3 rounded-lg my-3 overflow-x-auto text-xs; }
-    .preview-content ul { @apply list-disc pl-5 my-2; }
-    .preview-content ol { @apply list-decimal pl-5 my-2; }
-    .preview-content blockquote { @apply border-l-4 border-violet-500 pl-4 my-2 italic text-gray-600 dark:text-gray-400; }
+    /* 基础 Markdown 预览样式 */
+    .preview-content h1 { font-size: 1.5rem; line-height: 2rem; font-weight: 700; }
+    .preview-content h2 { font-size: 1.25rem; line-height: 1.75rem; font-weight: 700; margin: .75rem 0; }
+    .preview-content p { margin: .5rem 0; line-height: 1.625; font-size: .875rem; }
+    .preview-content code { background: #e5e7eb; padding: .125rem .375rem; border-radius: .25rem; font-size: .75rem; font-family: monospace; }
+    .dark .preview-content code { background: #374151; }
+    .preview-content pre { background: #f3f4f6; padding: .75rem; border-radius: .5rem; margin: .75rem 0; overflow-x: auto; font-size: .75rem; }
+    .dark .preview-content pre { background: #1f2937; }
+    .preview-content ul { list-style: disc; padding-left: 1.25rem; margin: .5rem 0; }
+    .preview-content ol { list-style: decimal; padding-left: 1.25rem; margin: .5rem 0; }
+    .preview-content blockquote { border-left: 4px solid #8b5cf6; padding-left: 1rem; margin: .5rem 0; font-style: italic; color: #4b5563; }
+    .dark .preview-content blockquote { color: #9ca3af; }
   </style>
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-200">
@@ -175,7 +181,6 @@
 
   <script is:inline>
     // --- 客户端控制逻辑 ---
-
     // 初始化默认日期
     document.getElementById('meta-date').value = new Date().toISOString().substring(0, 10);
 

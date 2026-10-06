@@ -142,6 +142,101 @@
    [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/CuteLeaf/Firefly&project-name=Firefly&repository-name=Firefly)
    [![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/CuteLeaf/Firefly)
 
+### Cloudflare Workers 与在线 Markdown 编辑器
+
+本项目通过 **Cloudflare Workers** 部署（不是 Cloudflare Pages），文章保存在 Cloudflare D1。编辑器不上传媒体文件，也不需要配置 Cloudflare R2：在“插入图片链接”或“插入视频链接”处粘贴你自己的图库/视频托管服务提供的 URL 即可；图片插入为 Markdown 图片，视频插入为可点击链接。
+
+#### 一、准备 Cloudflare 资源
+
+1. 注册/登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)。
+2. 在本地安装 Node.js（建议 20.19+ 或 22.12+）和 Git，并启用 Corepack。克隆仓库后，在仓库根目录安装依赖：
+
+   ```bash
+   corepack enable
+   corepack pnpm install --frozen-lockfile
+   ```
+
+3. 登录 Wrangler：
+
+   ```bash
+   corepack pnpm exec wrangler login
+   ```
+
+4. 创建 D1 数据库：
+
+   ```bash
+   corepack pnpm exec wrangler d1 create firefly_db
+   ```
+
+   命令输出中会包含一个 `database_id`。打开仓库根目录的 `wrangler.toml`，将 `[[d1_databases]]` 下的 `database_id` 替换为这个真实 ID；`database_name` 保持为 `firefly_db`，`binding` 保持为 `DB`。此配置文件需要提交到 Git 仓库，后续部署会读取它。
+
+5. 初始化远端数据库表：
+
+   ```bash
+   corepack pnpm exec wrangler d1 execute firefly_db --remote --file=./schema.sql
+   ```
+
+   如需确认表已创建，可执行：
+
+   ```bash
+   corepack pnpm exec wrangler d1 execute firefly_db --remote --command="SELECT name FROM sqlite_master WHERE type='table';"
+   ```
+
+#### 二、配置后台登录密钥
+
+Worker 已经首次部署后，在仓库根目录依次执行以下命令。Wrangler 会交互式提示输入密钥值；密码和 JWT secret 不要写入代码、`wrangler.toml` 或 Git。使用 GitHub 自动部署时，也可以先在 Worker 的 **Settings → Variables and Secrets** 中添加这些 Secrets，再触发第一次部署。
+
+```bash
+corepack pnpm exec wrangler secret put ADMIN_USERNAME
+corepack pnpm exec wrangler secret put ADMIN_PASSWORD
+corepack pnpm exec wrangler secret put JWT_SECRET
+```
+
+`JWT_SECRET` 必须至少 32 个字符，并使用随机、不可预测的值。可用密码管理器生成。每次更换这些值后，重新部署 Worker 使配置生效。
+
+#### 三、部署方式 A：从本地命令行部署
+
+确认 `wrangler.toml` 中的 D1 ID 已正确填写，且已初始化远端表后，在仓库根目录首次部署：
+
+```bash
+corepack pnpm run check
+corepack pnpm run build
+corepack pnpm exec wrangler deploy
+```
+
+Wrangler 会在 Cloudflare 中创建/更新 Worker。首次部署后，按“二、配置后台登录密钥”设置三个 Secrets，再运行 `corepack pnpm exec wrangler deploy` 发布密钥配置。设置 Secrets 前后台登录/API 不可用。后续每次更新代码时运行构建和部署命令即可。部署完成后，在 Dashboard 的 **Workers & Pages → firefly-blog → Settings → Domains & Routes** 中检查 `workers.dev` 地址，或按界面指引绑定自己的域名。
+
+#### 四、部署方式 B：连接 GitHub 自动部署
+
+1. 将代码推送到 GitHub 仓库。确认已提交更新后的 `wrangler.toml`，其中包含正确的 D1 `database_id`；**不要提交任何 Secret 值**。
+2. 在 Cloudflare Dashboard 进入 **Workers & Pages**，创建 Worker 并选择连接 GitHub 仓库。按界面提示授权 Cloudflare 访问仓库。
+3. 配置构建设置：
+   - 根目录：仓库根目录 `/`
+   - 构建命令：`corepack pnpm run build`
+   - 部署命令：`corepack pnpm exec wrangler deploy`
+   - 安装命令（如界面要求）：`corepack pnpm install --frozen-lockfile`
+4. 在该 Worker 的 **Settings → Variables and Secrets** 中添加以下加密 Secret：`ADMIN_USERNAME`、`ADMIN_PASSWORD`、`JWT_SECRET`。`JWT_SECRET` 至少 32 个字符。
+5. 保存配置并触发部署。也可在之后向连接的分支推送提交，以触发自动构建和发布。
+
+#### 五、登录、编辑和媒体链接
+
+- 后台登录地址：`/admin/login/`；登录后管理文章。
+- 动态文章库：`/articles/`；通过 `/posts/{slug}` 访问对应文章。
+- 新建或编辑文章时，在工具栏点“插入图片链接”或“插入视频链接”，粘贴外部图库提供的完整 `https://` URL。图片按 Markdown 图片显示；视频以可点击链接呈现。也可在正文中直接粘贴 URL 或写标准 Markdown。
+- 图片/视频文件由你选择的外部图库或视频托管平台负责存储与访问。确认其链接允许从你的网站域名加载；私有链接、带时效的临时链接或要求登录的链接可能无法公开显示。
+- 现有本地 Markdown 文章仍保留。在线新建和修改的文章数据保存到 D1；删除现有文章会在 D1 中记录删除状态。
+
+#### 本地开发与数据库
+
+本地开发时先创建本地 D1 表，再启动 Worker 模拟环境：
+
+```bash
+corepack pnpm exec wrangler d1 execute firefly_db --local --file=./schema.sql
+corepack pnpm exec wrangler dev
+```
+
+`pnpm dev` 用于常规 Astro 开发；涉及 D1、后台认证或 Worker 绑定的功能应使用 `wrangler dev` 验证。针对本地 D1 的数据库命令使用 `--local`，初始化线上数据库则使用 `--remote`。
+
 ## 📖 配置说明
 
 > 📚 **详细配置文档**: 查看 [Firefly使用文档](https://docs-firefly.cuteleaf.cn/) 获取完整的配置指南

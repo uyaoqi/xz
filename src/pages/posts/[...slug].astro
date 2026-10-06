@@ -1,5 +1,5 @@
 ---
-import { render } from "astro:content";
+import { getCollection, render } from "astro:content";
 import * as path from "node:path";
 import Comment from "@components/comment/index.astro";
 import Markdown from "@components/common/Markdown.astro";
@@ -9,7 +9,7 @@ import License from "@components/misc/License.astro";
 import I18nKey from "@i18n/i18nKey";
 import { i18n } from "@i18n/translation";
 import MainGridLayout from "@layouts/MainGridLayout.astro";
-import { getRelatedPosts, getSortedPosts } from "@utils/content-utils";
+import { getRelatedPosts } from "@utils/content-utils";
 import {
 	getFileDirFromPath,
 	getPostUrlBySlug,
@@ -30,20 +30,31 @@ import { sponsorConfig } from "@/config/sponsorConfig";
 import { formatDateToYYYYMMDD } from "@/utils/date-utils";
 import { getApiUrlList, processCoverImageSync } from "@/utils/image-utils";
 import { url } from "@/utils/url-utils";
+import { getCloudflareEnv } from "@/utils/cloudflare";
 
-export async function getStaticPaths() {
-	const blogEntries = await getSortedPosts();
-	return blogEntries.map((entry) => {
-		// 将 id 转换为 slug（移除扩展名）以匹配路由参数
-		const slug = removeFileExtension(entry.id);
-		return {
-			params: { slug },
-			props: { entry },
-		};
-	});
+export const prerender = false;
+
+const slug = Astro.params.slug ?? "";
+const { DB } = getCloudflareEnv();
+const managedPost = await DB.prepare("SELECT deleted, draft FROM posts WHERE slug = ?")
+	.bind(slug)
+	.first<{ deleted: number; draft: number }>();
+
+if (managedPost?.deleted || managedPost?.draft) {
+	return Astro.redirect("/404/");
 }
 
-const { entry } = Astro.props;
+if (managedPost) {
+	return Astro.rewrite(`/articles/${encodeURIComponent(slug)}/`);
+}
+
+const entry = (await getCollection("posts")).find(
+	(post) => removeFileExtension(post.id) === slug,
+);
+if (!entry || (import.meta.env.PROD && entry.data.draft)) {
+	return Astro.redirect("/404/");
+}
+
 const { Content, headings } = await render(entry);
 
 const { remarkPluginFrontmatter } = await render(entry);

@@ -8,6 +8,8 @@ import MainGridLayout from "@/layouts/MainGridLayout.astro";
 import { getAlbumCover, scanAlbumPhotos } from "@/utils/gallery-utils";
 import { url } from "@/utils/url-utils";
 
+export const prerender = true;
+
 // 检查页面是否启用
 if (!siteConfig.pages.gallery) {
 	return Astro.redirect("/404/");

@@ -1,173 +1,245 @@
+import { getCollection } from "astro:content";
+import type { APIRoute } from "astro";
+import {
+	type D1Statement,
+	getCloudflareEnv,
+	type PostRecord,
+} from "../../../utils/cloudflare";
+
 export const prerender = false;
-import type { APIRoute } from 'astro';
-import fs from 'node:fs';
-import path from 'node:path';
-import matter from 'gray-matter';
 
-const POSTS_DIR = path.resolve(process.cwd(), 'src/content/posts');
+const json = (body: unknown, status = 200) =>
+	new Response(JSON.stringify(body), {
+		status,
+		headers: { "Content-Type": "application/json; charset=utf-8" },
+	});
 
-// Helper: GitHub API 操作
-async function commitToGitHub(filePath: string, content: string | null, message: string) {
-  const token = process.env.GITHUB_TOKEN;
-  const owner = process.env.GITHUB_OWNER;
-  const repo = process.env.GITHUB_REPO;
-  const branch = process.env.GITHUB_BRANCH || 'main';
-
-  if (!token || !owner || !repo) return false;
-
-  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
-  let sha: string | undefined;
-
-  const getRes = await fetch(url + `?ref=${branch}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github.v3+json',
-      'User-Agent': 'Firefly-Blog-CMS',
-    },
-  });
-
-  if (getRes.ok) {
-    const data = await getRes.json();
-    sha = data.sha;
-  }
-
-  // content 为 null 代表删除操作
-  if (content === null) {
-    if (!sha) return true;
-    await fetch(url, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'User-Agent': 'Firefly-Blog-CMS',
-      },
-      body: JSON.stringify({ message, sha, branch }),
-    });
-    return true;
-  }
-
-  // 新增或更新文件
-  const body: any = {
-    message,
-    content: Buffer.from(content).toString('base64'),
-    branch,
-  };
-  if (sha) body.sha = sha;
-
-  const putRes = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'User-Agent': 'Firefly-Blog-CMS',
-    },
-    body: JSON.stringify(body),
-  });
-
-  return putRes.ok;
+function toPostResponse(post: PostRecord) {
+	const metadata = JSON.parse(post.metadata) as Record<string, unknown>;
+	return {
+		slug: post.slug,
+		title: post.title,
+		published: post.published,
+		draft: Boolean(post.draft),
+		tags: JSON.parse(post.tags) as string[],
+		category: post.category || "未分类",
+		frontmatter: metadata,
+		content: post.content,
+	};
 }
 
-// 1. GET: 获取文章列表或单篇文章详情
 export const GET: APIRoute = async ({ url }) => {
-  const slug = url.searchParams.get('slug');
+	try {
+		const { DB } = getCloudflareEnv();
+		const slug = url.searchParams.get("slug");
+		if (slug) {
+			const post = await DB.prepare("SELECT * FROM posts WHERE slug = ?")
+				.bind(slug)
+				.first<PostRecord>();
+				if (post) {
+					return post.deleted
+						? json({ error: "文章不存在。" }, 404)
+						: json(toPostResponse(post));
+				}
 
-  if (slug) {
-    const filePath = path.join(POSTS_DIR, `${slug}.md`);
-    if (!fs.existsSync(filePath)) {
-      return new Response(JSON.stringify({ error: '文章不存在' }), { status: 404 });
-    }
-    const fileContent = fs.readFileSync(filePath, 'utf-8');
-    const { data, content } = matter(fileContent);
-    return new Response(JSON.stringify({ frontmatter: data, content, slug }), { status: 200 });
-  }
+				const sourcePost = (await getCollection("posts")).find(
+					(entry) => entry.id.replace(/\.(md|mdx)$/i, "") === slug,
+				);
+				if (!sourcePost) return json({ error: "文章不存在。" }, 404);
+				return json({
+					slug,
+					title: sourcePost.data.title,
+					published: sourcePost.data.published.toISOString().slice(0, 10),
+					draft: sourcePost.data.draft,
+					tags: sourcePost.data.tags,
+					category: sourcePost.data.category || "未分类",
+					frontmatter: sourcePost.data,
+					content: sourcePost.body ?? "",
+				});
+			}
 
-  if (!fs.existsSync(POSTS_DIR)) {
-    fs.mkdirSync(POSTS_DIR, { recursive: true });
-  }
-
-  const files = fs.readdirSync(POSTS_DIR).filter((f) => f.endsWith('.md') || f.endsWith('.mdx'));
-  const posts = files.map((file) => {
-    const slug = file.replace(/\.(md|mdx)$/, '');
-    const content = fs.readFileSync(path.join(POSTS_DIR, file), 'utf-8');
-    const { data } = matter(content);
-    return {
-      slug,
-      title: data.title || slug,
-      published: data.published ? new Date(data.published).toISOString().split('T')[0] : '',
-      draft: !!data.draft,
-      tags: data.tags || [],
-      category: data.category || '未分类',
-    };
-  });
-
-  // 按日期降序
-  posts.sort((a, b) => (a.published < b.published ? 1 : -1));
-  return new Response(JSON.stringify(posts), { status: 200 });
+			const [{ results }, sourcePosts] = await Promise.all([
+				DB.prepare("SELECT * FROM posts ORDER BY published DESC, updated_at DESC")
+					.all<PostRecord>(),
+				getCollection("posts"),
+			]);
+			const postMap = new Map<string, ReturnType<typeof toPostResponse>>();
+			for (const sourcePost of sourcePosts) {
+				const sourceSlug = sourcePost.id.replace(/\.(md|mdx)$/i, "");
+				postMap.set(sourceSlug, {
+					slug: sourceSlug,
+					title: sourcePost.data.title,
+					published: sourcePost.data.published.toISOString().slice(0, 10),
+					draft: sourcePost.data.draft,
+					tags: sourcePost.data.tags,
+					category: sourcePost.data.category || "未分类",
+					frontmatter: sourcePost.data,
+					content: sourcePost.body ?? "",
+				});
+			}
+			for (const post of results) {
+				if (post.deleted) {
+					postMap.delete(post.slug);
+				} else {
+					postMap.set(post.slug, toPostResponse(post));
+				}
+			}
+			return json(
+				[...postMap.values()].sort((a, b) =>
+					a.published < b.published ? 1 : -1,
+				),
+			);
+		} catch (error) {
+		console.error("Failed to read posts from D1:", error);
+		return json({ error: "读取文章失败，请检查 D1 数据库配置。" }, 500);
+	}
 };
 
-// 2. POST: 保存 / 新建 / 更新文章
 export const POST: APIRoute = async ({ request }) => {
-  try {
-    const { slug, originalSlug, frontmatter, content } = await request.json();
+	try {
+		const payload: unknown = await request.json();
+		if (!payload || typeof payload !== "object") {
+			return json({ error: "请求内容无效。" }, 400);
+		}
 
-    if (!slug) {
-      return new Response(JSON.stringify({ error: 'Slug/文件名不能为空' }), { status: 400 });
-    }
+		const { slug, originalSlug, frontmatter, content } = payload as Record<
+			string,
+			unknown
+		>;
+		if (
+			typeof slug !== "string" ||
+			!slug.trim() ||
+			!/^[-\p{L}\p{N}_]+$/u.test(slug.trim()) ||
+			!frontmatter ||
+			typeof frontmatter !== "object" ||
+			typeof content !== "string"
+		) {
+			return json({ error: "请提供有效的文章别名、元数据和 Markdown 正文。" }, 400);
+		}
+		if (content.length > 1_000_000) {
+			return json({ error: "文章正文不能超过 1 MB。" }, 413);
+		}
 
-    const cleanSlug = slug.replace(/[^a-zA-Z0-9_\-\u4e00-\u9fa5]/g, '-').toLowerCase();
-    const markdownData = matter.stringify(content || '', frontmatter);
-    const targetFile = path.join(POSTS_DIR, `${cleanSlug}.md`);
+		const cleanSlug = slug.trim().toLowerCase();
+		const oldSlug =
+			typeof originalSlug === "string" && originalSlug !== cleanSlug
+				? originalSlug
+				: null;
+		const metadata = frontmatter as Record<string, unknown>;
+		const sourceSlug =
+			typeof originalSlug === "string" ? originalSlug : cleanSlug;
+		const sourcePost = (await getCollection("posts")).find(
+			(entry) => entry.id.replace(/\.(md|mdx)$/i, "") === sourceSlug,
+		);
+		if (sourcePost?.data.password) {
+			return json(
+				{ error: "加密文章暂不支持通过在线编辑器修改，请继续使用原有加密文章流程。" },
+				400,
+			);
+		}
 
-    // 如果修改了 Slug，清理旧文件
-    if (originalSlug && originalSlug !== cleanSlug) {
-      const oldFile = path.join(POSTS_DIR, `${originalSlug}.md`);
-      if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
-      await commitToGitHub(`src/content/posts/${originalSlug}.md`, null, `Delete old: ${originalSlug}`);
-    }
+		const title =
+			typeof metadata.title === "string" && metadata.title.trim()
+				? metadata.title.trim()
+				: cleanSlug;
+		const published =
+			typeof metadata.published === "string" && metadata.published
+				? metadata.published
+				: new Date().toISOString().slice(0, 10);
+		const tags = Array.isArray(metadata.tags)
+			? metadata.tags.filter((tag): tag is string => typeof tag === "string")
+			: [];
+		const category =
+			typeof metadata.category === "string" ? metadata.category : "";
+		const description =
+			typeof metadata.description === "string" ? metadata.description : "";
+		const image = typeof metadata.image === "string" ? metadata.image : "";
 
-    // 写入本地文件系统
-    fs.writeFileSync(targetFile, markdownData, 'utf-8');
+		const { DB } = getCloudflareEnv();
+		const conflictingPost = await DB.prepare(
+			"SELECT slug FROM posts WHERE slug = ?",
+		)
+			.bind(cleanSlug)
+			.first<{ slug: string }>();
+		if (conflictingPost && conflictingPost.slug !== oldSlug) {
+			return json({ error: "该文章别名已被使用。" }, 409);
+		}
 
-    // 如果配置了 GitHub Token，提交到远端触发全自动构建发布
-    const gitSuccess = await commitToGitHub(
-      `src/content/posts/${cleanSlug}.md`,
-      markdownData,
-      `Publish post: ${frontmatter.title || cleanSlug}`
-    );
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        slug: cleanSlug,
-        triggeredDeploy: gitSuccess,
-        message: gitSuccess ? '已自动触发构建发布！' : '已保存到本地。',
-      }),
-      { status: 200 }
-    );
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
-  }
+		const statements: D1Statement[] = [];
+		if (oldSlug) {
+			statements.push(
+				DB.prepare(
+					`INSERT INTO posts (slug, title, content, published, deleted, metadata, updated_at)
+					 VALUES (?, ?, '', ?, 1, '{}', CURRENT_TIMESTAMP)
+					 ON CONFLICT(slug) DO UPDATE SET deleted = 1, updated_at = CURRENT_TIMESTAMP`,
+				).bind(oldSlug, oldSlug, published),
+			);
+		}
+		statements.push(
+			DB.prepare(
+				`INSERT INTO posts
+					(slug, title, content, category, tags, published, draft, description, image, pinned, metadata, deleted, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+				 ON CONFLICT(slug) DO UPDATE SET
+					title = excluded.title,
+					content = excluded.content,
+					category = excluded.category,
+					tags = excluded.tags,
+					published = excluded.published,
+					draft = excluded.draft,
+					description = excluded.description,
+					image = excluded.image,
+					pinned = excluded.pinned,
+					metadata = excluded.metadata,
+					deleted = 0,
+					updated_at = CURRENT_TIMESTAMP`,
+			).bind(
+				cleanSlug,
+				title,
+				content,
+				category,
+				JSON.stringify(tags),
+				published,
+				metadata.draft === true ? 1 : 0,
+				description,
+				image,
+				metadata.pinned === true ? 1 : 0,
+				JSON.stringify(metadata),
+			),
+		);
+		await DB.batch(statements);
+		return json({ success: true, slug: cleanSlug, message: "文章已保存到 D1。" });
+	} catch (error) {
+		console.error("Failed to save post to D1:", error);
+		return json({ error: "保存文章失败，请检查 D1 数据库配置。" }, 500);
+	}
 };
 
-// 3. DELETE: 删除文章
 export const DELETE: APIRoute = async ({ url }) => {
-  const slug = url.searchParams.get('slug');
-  if (!slug) {
-    return new Response(JSON.stringify({ error: '缺少 slug' }), { status: 400 });
-  }
+	const slug = url.searchParams.get("slug");
+	if (!slug || !/^[-\p{L}\p{N}_]+$/u.test(slug)) {
+		return json({ error: "缺少有效的文章别名。" }, 400);
+	}
 
-  const filePath = path.join(POSTS_DIR, `${slug}.md`);
-  if (fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
-  }
-
-  const gitSuccess = await commitToGitHub(`src/content/posts/${slug}.md`, null, `Delete post: ${slug}`);
-
-  return new Response(
-    JSON.stringify({
-      success: true,
-      triggeredDeploy: gitSuccess,
-    }),
-    { status: 200 }
-  );
+	try {
+		const { DB } = getCloudflareEnv();
+		const sourcePost = (await getCollection("posts")).find(
+			(entry) => entry.id.replace(/\.(md|mdx)$/i, "") === slug,
+		);
+		if (sourcePost) {
+			await DB.prepare(
+				`INSERT INTO posts (slug, title, content, published, deleted, metadata, updated_at)
+				 VALUES (?, ?, '', ?, 1, '{}', CURRENT_TIMESTAMP)
+				 ON CONFLICT(slug) DO UPDATE SET deleted = 1, updated_at = CURRENT_TIMESTAMP`,
+			)
+				.bind(slug, slug, sourcePost.data.published.toISOString().slice(0, 10))
+				.run();
+		} else {
+			await DB.prepare("DELETE FROM posts WHERE slug = ?").bind(slug).run();
+		}
+		return json({ success: true, deleted: true });
+	} catch (error) {
+		console.error("Failed to delete post from D1:", error);
+		return json({ error: "删除文章失败，请检查 D1 数据库配置。" }, 500);
+	}
 };
