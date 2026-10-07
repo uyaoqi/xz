@@ -1,4 +1,4 @@
-name = "firefly-blog"
+name = "xz"
 main = "@astrojs/cloudflare/entrypoints/server"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
