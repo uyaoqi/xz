@@ -5,6 +5,6 @@ compatibility_flags = ["nodejs_compat"]
 
 # Bind the Cloudflare D1 database.
 [[d1_databases]]
-binding = "4v"
-database_name = "xz_session"
+binding = "DB"
+database_name = "4v"
 database_id = "ce76d53b-6a61-40be-957a-4ad3e88ab5cd" # Replace with the ID returned by `wrangler d1 create`.
